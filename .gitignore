@@ -1,0 +1,13 @@
+# Deploy artifacts (built per deploy, never committed)
+*.zip
+deploy-*/
+.scratch/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# Dependencies
+node_modules/
