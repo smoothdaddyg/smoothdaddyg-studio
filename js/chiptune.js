@@ -8,8 +8,13 @@ function makeAudio() {
   "use strict";
   let ctx = null;
   let muted = false;
+  // iOS Safari permanently suspends an AudioContext created before the
+  // first user gesture — resume() later can't revive it. So no context
+  // exists until unlockNow() runs inside a real tap/click.
+  let unlocked = false;
 
   function ac() {
+    if (!unlocked) return null;
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC();
@@ -30,6 +35,7 @@ function makeAudio() {
     const slideTo = opts.slideTo || null;
     try {
       const c = ac();
+      if (!c) return; // pre-gesture: stay silent, game still works
       const t = c.currentTime + when;
       const o = c.createOscillator();
       const g = c.createGain();
@@ -63,13 +69,14 @@ function makeAudio() {
      opts: filter ("lowpass"|"highpass"|"bandpass"), freq, Q, vol,
      when (sec delay), attack (sec fade-in). Always decays to silence. */
   function noise(dur, opts) {
-    if (muted) return;
+    if (muted) return null;
     opts = opts || {};
     const when = opts.when || 0;
     const attack = opts.attack || 0.005;
     const vol = opts.vol != null ? opts.vol : 0.2;
     try {
       const c = ac();
+      if (!c) return null; // pre-gesture: stay silent, game still works
       const t = c.currentTime + when;
       const len = Math.max(1, Math.floor(c.sampleRate * dur));
       const buf = c.createBuffer(1, len, c.sampleRate);
@@ -104,9 +111,25 @@ function makeAudio() {
     }
   }
 
-  /* iOS requires a gesture before audio; unlock on first touch. */
+  /* iOS requires the AudioContext to be created inside a user gesture.
+     First tap/click unlocks it, plays a 1-sample silent buffer as
+     belt-and-suspenders, and removes the listeners. */
   function unlockNow() {
-    try { ac(); } catch (e) { /* ignore */ }
+    if (!unlocked) {
+      unlocked = true;
+      try {
+        const c = ac();
+        if (c) {
+          const buf = c.createBuffer(1, 1, c.sampleRate);
+          const src = c.createBufferSource();
+          src.buffer = buf;
+          src.connect(c.destination);
+          src.start(0);
+        }
+      } catch (e) { /* ignore */ }
+    } else {
+      try { ac(); } catch (e) { /* ignore */ }
+    }
   }
   window.addEventListener("pointerdown", function unlock() {
     unlockNow();
@@ -122,7 +145,7 @@ function makeAudio() {
     arp: arp,
     noise: noise,
     unlock: unlockNow,
-    state: function () { return ctx ? ctx.state : "none"; },
+    state: function () { return ctx ? ctx.state : (unlocked ? "none" : "locked"); },
     toggleMute: function () {
       muted = !muted;
       return muted;
