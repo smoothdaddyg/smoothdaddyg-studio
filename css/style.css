@@ -484,6 +484,16 @@ footer .free {
   cursor: pointer;
 }
 
+/* Back-to-games link: big, chunky, impossible to miss. */
+.game-ui a {
+  font-size: 26px;
+  min-width: 84px;
+  min-height: 84px;
+  border-width: 3px;
+  background: rgba(10, 10, 19, 0.88);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+}
+
 .game-ui a:hover, .game-ui button:hover { border-color: var(--cyan); }
 
 /* ---------- focus & motion ---------- */

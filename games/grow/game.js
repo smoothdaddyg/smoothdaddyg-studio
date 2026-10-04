@@ -943,14 +943,6 @@
   canvas.addEventListener("pointerdown", onTap);
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
-  const muteBtn = document.getElementById("muteBtn");
-  muteBtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    const m = audio.toggleMute();
-    muteBtn.style.opacity = m ? "0.35" : "1";
-    if (m) stopAllAmbient();
-    else if (audioStarted) startAmbientBed(weather);
-  });
 
   /* ---------- drawing ---------- */
 

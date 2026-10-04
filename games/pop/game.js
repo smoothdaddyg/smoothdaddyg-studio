@@ -113,11 +113,6 @@
   canvas.addEventListener("pointerdown", onTap);
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  const muteBtn = document.getElementById("muteBtn");
-  muteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    muteBtn.style.opacity = audio.toggleMute() ? "0.35" : "1";
-  });
 
   function drawOrb(o) {
     let scale = 1;

@@ -12,6 +12,7 @@ on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 - (add tasks here)
 
 ## Done
+- 2026-10-04 — Blitz upgrades + global UI cleanup (his call): removed the mute/sound button from all 11 games (sound always on; device volume is the control), enlarged the back button (84px, chunkier border). Blitz: R2-D2-style power-down wail on plane-on-plane crashes, Sopwith-style whole-field minimap strip at bottom center, 5 levels (6→10 bases, faster/darker enemy planes each level, weather sunny→cloud→wind→rain→storm with matching sound beds, rain, and lightning+thunder). 30/30 node logic tests pass.
 - 2026-10-04 — Blitz silent-audio fix: root cause was iOS permanently suspending an AudioContext created before the first user gesture (blitz's engine putt-putt created it on frame 1; later resume() calls can't revive it). chiptune.js now defers context creation until the first tap (pointerdown/touchend unlock + silent-buffer warm-up); tone()/noise() stay silent pre-gesture. Verified live.
 - 2026-10-04 — Forced-refresh fix, part 2: his iPhone kept serving the old games.js from its week-long cache without asking the server. Committed `?v=` stamps on all CSS/JS URLs (new `tools/stamp-assets.sh`, run before deploy pushes) so browsers see new URLs and must fetch fresh; verified live.
 - 2026-10-04 — Cache rules fixed: HTML `no-store`, CSS/JS/images `no-cache, must-revalidate` (Git deploys carry no ?v= stamps, so week-long caching was serving stale files). Verified live via response headers.

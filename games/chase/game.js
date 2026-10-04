@@ -130,11 +130,6 @@
   canvas.addEventListener("pointerdown", onTap);
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
-  const muteBtn = document.getElementById("muteBtn");
-  muteBtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    muteBtn.style.opacity = audio.toggleMute() ? "0.35" : "1";
-  });
 
   function drawStar() {
     // squash & stretch

@@ -217,11 +217,6 @@
   canvas.addEventListener("pointermove", onPoint);
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
-  const muteBtn = document.getElementById("muteBtn");
-  muteBtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    muteBtn.style.opacity = audio.toggleMute() ? "0.35" : "1";
-  });
 
   function drawBasket() {
     const w = basketW(), h = 46;
