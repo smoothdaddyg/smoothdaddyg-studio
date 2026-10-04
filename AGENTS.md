@@ -9,8 +9,12 @@ How we work on this site. Both human developers and their agents follow this.
 - Coordinate in `TASKS.md` before touching shared files:
   `js/chiptune.js`, `js/main.js`, `js/games.js`, this file.
 - Deploys go through Hostinger's Git deploy (auto-deploy on push to `main` via
-  webhook). The `?v=` version stamps are added by `tools/stamp.sh` during the
-  manual zip deploy path; the Git deploy path serves files as committed.
+  webhook). Because Git deploys serve files exactly as committed, browsers are
+  cache-busted with committed `?v=` stamps: run `tools/stamp-assets.sh` before
+  pushing any deploy that changes CSS, JS, or game code. The `.htaccess`
+  backs this up (HTML `no-store`; CSS/JS/images `no-cache, must-revalidate`).
+- The old manual zip path (`tools/stamp.sh`, stamp-a-copy) is retired unless
+  Git deploy breaks.
 
 ## Adding a game
 - New game lives in `games/<id>/` with `index.html` + `game.js`.
