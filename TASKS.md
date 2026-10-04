@@ -12,6 +12,7 @@ on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 - (add tasks here)
 
 ## Done
+- 2026-10-04 — Forced-refresh fix, part 2: his iPhone kept serving the old games.js from its week-long cache without asking the server. Committed `?v=` stamps on all CSS/JS URLs (new `tools/stamp-assets.sh`, run before deploy pushes) so browsers see new URLs and must fetch fresh; verified live.
 - 2026-10-04 — Cache rules fixed: HTML `no-store`, CSS/JS/images `no-cache, must-revalidate` (Git deploys carry no ?v= stamps, so week-long caching was serving stale files). Verified live via response headers.
 - 2026-10-04 — New game: Biplane Blitz (Sopwith-style: touch above/below plane to climb/dive, mirrored FIRE + BOMB buttons both sides, 6 bases, 3 shields). 11 games live.
 - 2026-10-03 — Repo created; site source of truth moved to GitHub (private).
