@@ -107,4 +107,12 @@ const GAMES = [
     sprite: "invader",
     url: "games/starguard/",
   },
+  {
+    id: "blitz",
+    title: "Biplane Blitz",
+    desc: "Climb, dive, bomb the bases.",
+    hue: 15,
+    sprite: "plane",
+    url: "games/blitz/",
+  },
 ];

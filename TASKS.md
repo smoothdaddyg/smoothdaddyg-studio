@@ -12,4 +12,5 @@ on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 - (add tasks here)
 
 ## Done
+- 2026-10-04 — New game: Biplane Blitz (Sopwith-style: touch above/below plane to climb/dive, mirrored FIRE + BOMB buttons both sides, 6 bases, 3 shields). 11 games live.
 - 2026-10-03 — Repo created; site source of truth moved to GitHub (private).
