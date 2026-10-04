@@ -105,15 +105,24 @@ function makeAudio() {
   }
 
   /* iOS requires a gesture before audio; unlock on first touch. */
-  window.addEventListener("pointerdown", function unlock() {
+  function unlockNow() {
     try { ac(); } catch (e) { /* ignore */ }
+  }
+  window.addEventListener("pointerdown", function unlock() {
+    unlockNow();
     window.removeEventListener("pointerdown", unlock);
+  });
+  window.addEventListener("touchend", function unlock2() {
+    unlockNow();
+    window.removeEventListener("touchend", unlock2);
   });
 
   return {
     tone: tone,
     arp: arp,
     noise: noise,
+    unlock: unlockNow,
+    state: function () { return ctx ? ctx.state : "none"; },
     toggleMute: function () {
       muted = !muted;
       return muted;

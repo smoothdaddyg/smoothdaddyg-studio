@@ -680,6 +680,7 @@
   if (typeof window !== "undefined") {
     window.__blitz = {
       wrapX: wrapX, zoneAt: zoneAt, inZone: inZone,
+      audioState: function () { return audio.state(); },
       _set: function (o) {
         if (o.scroll != null) scroll = o.scroll;
         if (o.worldW != null) worldW = o.worldW;
