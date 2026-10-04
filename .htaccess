@@ -1,16 +1,19 @@
 <IfModule mod_headers.c>
-  # HTML pages: browsers must always re-check, so new deploys show up right away.
+  # HTML pages: never cached anywhere. Every load fetches the live page,
+  # so new deploys show up immediately on all browsers.
   <FilesMatch "\.html$">
+    Header set Cache-Control "no-store"
+  </FilesMatch>
+
+  # CSS/JS: browsers must re-check with the server on every load.
+  # Unchanged files get a cheap 304 reply; changed files come down fresh.
+  # (Git deploys don't add ?v= stamps, so long caching is not safe.)
+  <FilesMatch "\.(css|js)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 
-  # CSS/JS: version-stamped on every deploy, so a week of caching is safe.
-  <FilesMatch "\.(css|js)$">
-    Header set Cache-Control "public, max-age=604800"
-  </FilesMatch>
-
-  # Images: cache for 30 days.
+  # Images: same deal — revalidate every load, so new cover art appears.
   <FilesMatch "\.(webp|png|jpe?g|gif|svg|ico)$">
-    Header set Cache-Control "public, max-age=2592000"
+    Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>
