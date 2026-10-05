@@ -115,4 +115,12 @@ const GAMES = [
     sprite: "plane",
     url: "games/blitz/",
   },
+  {
+    id: "timewings",
+    title: "Time Wings",
+    desc: "Drag to steer through four eras of sky.",
+    hue: 265,
+    sprite: "plane",
+    url: "games/timewings/",
+  },
 ];
