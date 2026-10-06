@@ -116,21 +116,17 @@ section.block { padding: 72px 0; }
 
 .logo {
   font-family: var(--display);
-  font-size: 24px;
-  letter-spacing: 2px;
+  font-size: 22px;
+  letter-spacing: 1px;
   color: var(--cyan);
   text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow:
-    0 0 8px rgba(41, 250, 255, 0.8),
-    0 0 24px rgba(41, 250, 255, 0.45);
+  text-shadow: 0 0 10px rgba(41, 250, 255, 0.4);
 }
 
 .logo:hover {
-  text-shadow:
-    0 0 10px rgba(41, 250, 255, 1),
-    0 0 34px rgba(41, 250, 255, 0.6);
+  text-shadow: 0 0 14px rgba(41, 250, 255, 0.65);
 }
 
 .nav-links { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -168,15 +164,15 @@ section.block { padding: 72px 0; }
 .wordmark {
   font-family: var(--display);
   text-transform: uppercase;
-  font-size: clamp(44px, 10vw, 104px);
-  letter-spacing: 4px;
-  margin: 0 0 18px;
+  /* fits one line on a phone, grows on desktop */
+  font-size: clamp(26px, 7.4vw, 96px);
+  letter-spacing: 1px;
+  margin: 0 auto 18px;
+  max-width: 100%;
   line-height: 1.1;
+  white-space: nowrap;
   color: var(--cyan);
-  text-shadow:
-    0 0 10px rgba(41, 250, 255, 0.9),
-    0 0 34px rgba(41, 250, 255, 0.55),
-    0 0 90px rgba(41, 250, 255, 0.35);
+  text-shadow: 0 0 12px rgba(41, 250, 255, 0.45);
 }
 
 .hero .tagline {
@@ -527,4 +523,5 @@ a:focus-visible, button:focus-visible {
   section.block { padding: 52px 0; }
   .hero { padding: 64px 20px 48px; }
   .nav-links a { padding: 12px 10px; font-size: 14px; }
+  .logo { font-size: 18px; }
 }
