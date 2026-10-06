@@ -78,6 +78,27 @@
   }
 
   /* ---------------- world ---------------- */
+  // Rolling hills: periodic in worldW so the loop joins seamlessly.
+  function groundAt(wx) {
+    var t = wx / worldW * Math.PI * 2;
+    return groundY + Math.sin(t * 3 + 1.3) * 26 + Math.sin(t * 7 + 4.1) * 14;
+  }
+
+  // Nudge a base into the nearest valley so shelters nestle between hills.
+  function nestle(wx) {
+    var best = wx, bestG = groundAt(wx);
+    for (var d = -180; d <= 180; d += 18) {
+      var g = groundAt(wx + d);
+      if (g > bestG) { bestG = g; best = wx + d; }
+    }
+    return ((best % worldW) + worldW) % worldW;
+  }
+
+  // How often a concrete bunker appears: tougher as levels rise.
+  function concreteEvery() {
+    return Math.max(2, 5 - level);
+  }
+
   function baseShape(i) {
     // A few chunky ground-target silhouettes, cycled.
     var kinds = ["hangar", "tank", "tower", "tent", "tank", "hangar"];
@@ -86,10 +107,16 @@
 
   function resetBases() {
     bases = [];
+    var ce = concreteEvery();
     for (var i = 0; i < baseCount; i++) {
       // Spread around the loop, never under the spawn runway.
-      var wx = worldW * ((i + 0.6) / baseCount);
-      bases.push({ wx: wx, kind: baseShape(i), alive: true, wob: Math.random() * 6.28 });
+      var wx = nestle(worldW * ((i + 0.6) / baseCount));
+      var concrete = (i % ce === ce - 1);
+      bases.push({
+        wx: wx, kind: concrete ? "bunker" : baseShape(i),
+        alive: true, wob: Math.random() * 6.28,
+        hp: concrete ? 3 : 1, maxHp: concrete ? 3 : 1
+      });
     }
   }
 
@@ -250,7 +277,7 @@
       explode(planeX, plane.y, true);
       audio.arp([392, 311, 262, 196], 0.16, "triangle", 0.16);
     } else {
-      plane.y = Math.min(plane.y, groundY - 160);
+      plane.y = Math.min(plane.y, groundAt(scroll + planeX) - 160);
       plane.vy = 0;
     }
   }
@@ -310,9 +337,10 @@
 
       var top = 70;
       if (plane.y < top) { plane.y = top; plane.vy = 0; }
-      if (plane.y > groundY - 26) {
+      var dirtY = groundAt(scroll + planeX) - 26;
+      if (plane.y > dirtY) {
         // kissed the dirt — forgiving bounce, costs a shield
-        plane.y = groundY - 26;
+        plane.y = dirtY;
         hurt();
         if (state === "play") { plane.vy = CLIMB * 0.7; }
       }
@@ -345,8 +373,8 @@
           var bs = bases[bi];
           if (!bs.alive) continue;
           var sx = wrapX(bs.wx);
-          if (Math.abs(b.x - sx) < 34 && b.y > groundY - 70) {
-            killBase(bs); bullets.splice(i, 1); hit = true; break;
+          if (Math.abs(b.x - sx) < 34 && b.y > groundAt(bs.wx) - 70) {
+            hitBase(bs); bullets.splice(i, 1); hit = true; break;
           }
         }
         if (hit) continue;
@@ -357,13 +385,14 @@
         var bo = bombs[k];
         bo.vy += GRAV * dt;
         bo.y += bo.vy * dt;
-        if (bo.y >= groundY - 6) {
+        var bgy = groundAt(scroll + bo.x);
+        if (bo.y >= bgy - 6) {
           bombs.splice(k, 1);
-          explode(bo.x, groundY - 10, true);
+          explode(bo.x, bgy - 10, true);
           for (var q = 0; q < bases.length; q++) {
             var qb = bases[q];
             if (!qb.alive) continue;
-            if (Math.abs(wrapX(qb.wx) - bo.x) < BLAST_R) killBase(qb);
+            if (Math.abs(wrapX(qb.wx) - bo.x) < BLAST_R) hitBase(qb);
           }
         }
       }
@@ -448,14 +477,23 @@
     if (shake > 0) shake = Math.max(0, shake - dt * 30);
   }
 
-  function killBase(bs) {
+  // Bombs and bullets wear a base down; concrete bunkers take 3 hits,
+  // crumbling a little more each time until the last one flattens it.
+  function hitBase(bs) {
     if (!bs.alive) return;
-    bs.alive = false;
-    var sx = wrapX(bs.wx);
-    explode(sx, groundY - 26, true);
-    addScore(500);
-    audio.arp([659, 880], 0.07, "square", 0.12);
-    checkWin();
+    bs.hp--;
+    var sx = wrapX(bs.wx), gy = groundAt(bs.wx);
+    if (bs.hp <= 0) {
+      bs.alive = false;
+      explode(sx, gy - 26, true);
+      addScore(500);
+      audio.arp([659, 880], 0.07, "square", 0.12);
+      checkWin();
+    } else {
+      explode(sx, gy - 26, false);
+      addScore(200);
+      audio.tone(140, 0.18, { type: "square", vol: 0.16, slideTo: 80 });
+    }
   }
 
   /* ---------------- draw ---------------- */
@@ -504,19 +542,48 @@
   }
 
   function drawBase(bs, sx) {
+    var gy = groundAt(bs.wx);
     if (!bs.alive) {
       // smoldering rubble
       ctx.fillStyle = "#4a4a4a";
-      ctx.fillRect(sx - 24, groundY - 12, 48, 12);
+      ctx.fillRect(sx - 24, gy - 12, 48, 12);
       if (Math.random() < 0.25) {
-        parts.push({ x: sx + (Math.random() - 0.5) * 30, y: groundY - 14, vx: 0, vy: -40, life: 0.8, t: 0, c: "#999", r: 3 });
+        parts.push({ x: sx + (Math.random() - 0.5) * 30, y: gy - 14, vx: 0, vy: -40, life: 0.8, t: 0, c: "#999", r: 3 });
       }
       return;
     }
     var wob = Math.sin(bs.wob += 0.02) * 2;
     ctx.save();
-    ctx.translate(sx, groundY);
-    if (bs.kind === "hangar") {
+    ctx.translate(sx, gy);
+    if (bs.kind === "bunker") {
+      // concrete bunker: 3 hits, crumbles a stage at a time
+      var dmg = bs.maxHp - bs.hp;
+      ctx.fillStyle = dmg >= 2 ? "#757575" : "#a8a8a8";
+      if (dmg >= 2) {
+        ctx.beginPath(); ctx.arc(-6, 2, 26, Math.PI * 1.05, -0.15); ctx.fill();
+        ctx.fillStyle = "#616161";
+        ctx.fillRect(8, -14, 14, 10);
+        ctx.fillRect(-32, -8, 10, 8);
+      } else {
+        ctx.beginPath(); ctx.arc(0, 0, 30, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = "#8a8a8a";
+        ctx.fillRect(-30, -4, 60, 6);
+      }
+      // firing slit
+      ctx.fillStyle = "#212121";
+      ctx.fillRect(-18, -18, 36, 7);
+      if (dmg >= 1) {
+        ctx.strokeStyle = "#424242"; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-12, -28); ctx.lineTo(-6, -16); ctx.lineTo(-10, -6);
+        ctx.moveTo(8, -29); ctx.lineTo(14, -18); ctx.lineTo(10, -8);
+        if (dmg >= 2) ctx.moveTo(0, -28); ctx.lineTo(-2, -14);
+        ctx.stroke();
+      }
+      if (dmg >= 2 && Math.random() < 0.3) {
+        parts.push({ x: sx + (Math.random() - 0.5) * 30, y: gy - 30, vx: 0, vy: -50, life: 0.9, t: 0, c: "#777", r: 4 });
+      }
+    } else if (bs.kind === "hangar") {
       ctx.fillStyle = "#8d6e63";
       ctx.fillRect(-30, -34, 60, 34);
       ctx.fillStyle = "#6d4c41";
@@ -646,15 +713,22 @@
     }
     ctx.lineTo(W + 20, groundY); ctx.closePath(); ctx.fill();
 
-    // ground
+    // rolling terrain — the ground itself has hills now
     ctx.fillStyle = "#7cb342";
-    ctx.fillRect(-20, groundY, W + 40, H - groundY + 20);
-    ctx.fillStyle = "#689f38";
-    ctx.fillRect(-20, groundY, W + 40, 10);
-    // runway dashes scroll by
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    var dashOff = scroll % 120;
-    for (var dx = -dashOff; dx < W; dx += 120) ctx.fillRect(dx, groundY + 44, 56, 7);
+    ctx.beginPath(); ctx.moveTo(-20, H + 20);
+    for (var gx = -20; gx <= W + 20; gx += 24) {
+      ctx.lineTo(gx, groundAt(scroll + gx));
+    }
+    ctx.lineTo(W + 20, H + 20); ctx.closePath(); ctx.fill();
+    // grassy top edge follows the hills
+    ctx.strokeStyle = "#689f38"; ctx.lineWidth = 7;
+    ctx.beginPath();
+    for (var gx2 = -20; gx2 <= W + 20; gx2 += 24) {
+      var gy2 = groundAt(scroll + gx2) + 3;
+      if (gx2 === -20) ctx.moveTo(gx2, gy2);
+      else ctx.lineTo(gx2, gy2);
+    }
+    ctx.stroke();
 
     // bases
     for (var b = 0; b < bases.length; b++) {
@@ -731,16 +805,24 @@
       ctx.fillStyle = lp < level ? "#ffd740" : "rgba(255,255,255,0.25)";
       ctx.beginPath(); ctx.arc(30 + lp * 24, 62, 7, 0, 6.29); ctx.fill();
     }
-    // bases remaining: target dots top-right
-    var left = 0;
-    for (var q = 0; q < bases.length; q++) if (bases[q].alive) left++;
+    // bases remaining: target dots top-right (squares = concrete bunkers)
     for (var r = 0; r < bases.length; r++) {
+      var bd = bases[r];
       var bx = W - 30 - r * 30;
-      ctx.fillStyle = r < left ? "#ff1744" : "rgba(255,255,255,0.3)";
-      ctx.beginPath(); ctx.arc(bx, 34, 9, 0, 6.29); ctx.fill();
-      if (r < left) {
-        ctx.fillStyle = "#fff";
-        ctx.beginPath(); ctx.arc(bx, 34, 3.5, 0, 6.29); ctx.fill();
+      ctx.fillStyle = bd.alive ? "#ff1744" : "rgba(255,255,255,0.3)";
+      if (bd.maxHp > 1) {
+        ctx.fillRect(bx - 8, 26, 16, 16);
+        if (bd.alive && bd.hp < bd.maxHp) {
+          // cracked: darker the more hits it has taken
+          ctx.fillStyle = "rgba(0,0,0," + (0.35 * (bd.maxHp - bd.hp) / bd.maxHp).toFixed(2) + ")";
+          ctx.fillRect(bx - 8, 26, 16, 16);
+        }
+      } else {
+        ctx.beginPath(); ctx.arc(bx, 34, 9, 0, 6.29); ctx.fill();
+        if (bd.alive) {
+          ctx.fillStyle = "#fff";
+          ctx.beginPath(); ctx.arc(bx, 34, 3.5, 0, 6.29); ctx.fill();
+        }
       }
     }
     // score, count-up
@@ -768,7 +850,12 @@
     for (var mi = 0; mi < bases.length; mi++) {
       var mb = bases[mi];
       ctx.fillStyle = mb.alive ? "#ff1744" : "rgba(255,255,255,0.25)";
-      ctx.beginPath(); ctx.arc(mapX(mb.wx), my + mh / 2, mb.alive ? 4 : 3, 0, 6.29); ctx.fill();
+      if (mb.maxHp > 1 && mb.alive) {
+        // concrete bunker: red square on the map
+        ctx.fillRect(mapX(mb.wx) - 3.5, my + mh / 2 - 3.5, 7, 7);
+      } else {
+        ctx.beginPath(); ctx.arc(mapX(mb.wx), my + mh / 2, mb.alive ? 4 : 3, 0, 6.29); ctx.fill();
+      }
     }
     ctx.fillStyle = "#ffab40";
     for (var me = 0; me < enemies.length; me++) {
@@ -840,10 +927,10 @@
   /* Test hook: pure-ish logic for node tests. */
   if (typeof window !== "undefined") {
     window.__blitz = {
-      wrapX: wrapX, zoneAt: zoneAt, inZone: inZone,
+      wrapX: wrapX, zoneAt: zoneAt, inZone: inZone, groundAt: groundAt,
       audioState: function () { return audio.state(); },
       levelInfo: function () {
-        return { level: level, weather: WEATHERS[level - 1], baseCount: 5 + level, levels: LEVELS };
+        return { level: level, weather: WEATHERS[level - 1], baseCount: 5 + level, levels: LEVELS, concreteEvery: concreteEvery() };
       },
       _set: function (o) {
         if (o.scroll != null) scroll = o.scroll;

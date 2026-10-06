@@ -18,7 +18,9 @@ How we work on this site. Both human developers and their agents follow this.
 
 ## Adding a game
 - New game lives in `games/<id>/` with `index.html` + `game.js`.
-- Register it in the `GAMES` array in `js/games.js` (id, title, blurb).
+- Register it in the `GAMES` array in `js/games.js` (id, title, blurb) —
+  PREPEND it to the FRONT of the array (catalog renders newest → oldest),
+  and renumber the JSON-LD `position` entries in `games.html` to match.
 - Cover art at `games/<id>/cover.webp` (1970s cartridge-box style). The catalog
   card auto-wires it from the game id, with a pixel-sprite fallback.
 - Add the game URL to `sitemap.xml` and the JSON-LD block in `games.html`.
