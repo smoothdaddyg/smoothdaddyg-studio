@@ -98,7 +98,7 @@ section.block { padding: 72px 0; }
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(10, 10, 19, 0.92);
+  background: rgba(0, 0, 0, 0.94);
   backdrop-filter: blur(8px);
   border-bottom: 2px solid #1e1e32;
 }
