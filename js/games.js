@@ -27,6 +27,7 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "dancejudge", title: "Dance Judge", desc: "Watch three silly couples dance, then score them 1-10 like a real judge!" },
   {
     id: "missmunch",
     title: "Miss Munch",
