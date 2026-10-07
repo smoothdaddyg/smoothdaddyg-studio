@@ -1746,6 +1746,7 @@
       var d2 = Math.hypot(x - replayBtn.x, y - replayBtn.y);
       if (d2 <= replayBtn.r * 1.3) {
         audio.arp([523, 659, 784], 0.08, "square", 0.12);
+        if (window.SDGplays) SDGplays.played("dancejudge");
         newShow(); startAct();
       }
     }

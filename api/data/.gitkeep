@@ -1,0 +1,3 @@
+Play logs land here (plays.jsonl), created by api/log-play.php on first write.
+This placeholder keeps the directory in git. The raw log is never web-readable
+(api/data/.htaccess denies all).

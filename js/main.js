@@ -135,6 +135,74 @@
     const counts = studioOn() ? SDGplays.getAll() : null;
     const list = studioOn() ? SDGplays.sortByPlays(GAMES, counts) : GAMES;
     renderGrid(el, list, counts);
+    renderStudioPanel();
+  }
+
+  /* World plays panel: global counts from the server log, studio only. */
+  let studioStatsCache = null; // null | "loading" | stats object
+  function renderStudioPanel() {
+    const grid = document.getElementById("game-grid");
+    if (!grid) return;
+    let panel = document.getElementById("studio-panel");
+    if (!studioOn()) {
+      if (panel) panel.remove();
+      studioStatsCache = null;
+      return;
+    }
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = "studio-panel";
+      panel.className = "studio-panel";
+      grid.parentNode.insertBefore(panel, grid);
+    }
+    if (studioStatsCache === "loading") return;
+    if (studioStatsCache) {
+      paintStudioPanel(panel, studioStatsCache);
+      return;
+    }
+    studioStatsCache = "loading";
+    panel.innerHTML = '<div class="studio-loading">COUNTING WORLD PLAYS…</div>';
+    SDGplays.globalStats().then((stats) => {
+      studioStatsCache = stats || { ok: false };
+      const p = document.getElementById("studio-panel");
+      if (p) paintStudioPanel(p, studioStatsCache);
+    });
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function paintStudioPanel(panel, stats) {
+    if (!stats || !stats.ok || !stats.total) {
+      panel.innerHTML = '<h2>WORLD PLAYS</h2><div class="studio-loading">NO PLAYS LOGGED YET — GO PLAY SOMETHING!</div>';
+      return;
+    }
+    const rows = GAMES.map((g) => ({ title: g.title, n: (stats.perGame && stats.perGame[g.id]) || 0 }))
+      .sort((a, b) => b.n - a.n);
+    const max = Math.max(1, rows[0].n);
+    const dayKeys = Object.keys(stats.perDay || {}).sort().slice(-7);
+    const dmax = Math.max(1, ...dayKeys.map((k) => stats.perDay[k]));
+    let html = "<h2>WORLD PLAYS</h2>" +
+      '<div class="studio-sub">' + stats.total + " PLAYS ACROSS EVERY DEVICE" +
+      (stats.since ? " · SINCE " + escHtml(new Date(stats.since * 1000).toLocaleDateString()) : "") + "</div>";
+    html += rows.map((r) =>
+      '<div class="studio-row"><span class="t">' + escHtml(r.title.toUpperCase()) + '</span>' +
+      '<span class="bar"><i style="width:' + Math.round((r.n / max) * 100) + '%"></i></span>' +
+      '<span class="n">' + r.n + "</span></div>"
+    ).join("");
+    if (dayKeys.length) {
+      html += '<div class="studio-days">' + dayKeys.map((k) => {
+        const parts = k.split("-");
+        const label = parts[1] + "/" + parts[2];
+        const n = stats.perDay[k];
+        const h = Math.max(4, Math.round((n / dmax) * 90));
+        return '<div class="studio-day"><div class="dn">' + n + '</div>' +
+          '<div class="db" style="height:' + h + 'px"></div>' +
+          '<div class="dl">' + label + "</div></div>";
+      }).join("") + "</div>";
+    }
+    panel.innerHTML = html;
   }
 
   function studioBadge() {
@@ -253,6 +321,21 @@
     .card { position:relative; }
     .plays-chip { position:absolute; top:10px; right:10px; z-index:2; font-family:'Press Start 2P',monospace; font-size:9px; letter-spacing:1px; color:#ffe14d; background:rgba(8,8,14,.78); border:1px solid rgba(255,225,77,.45); padding:6px 8px; border-radius:6px; pointer-events:none; }
     .logo .studio-tag { display:inline-block; margin-left:8px; padding:4px 7px; font-family:'Press Start 2P',monospace; font-size:8px; letter-spacing:2px; color:#0b0b16; background:#ffe14d; border-radius:4px; vertical-align:middle; }
+    /* studio panel: WORLD plays (global, from the server log) */
+    .studio-panel { margin:0 0 26px; padding:18px 20px 20px; background:rgba(10,12,30,.72); border:1px solid rgba(41,250,255,.35); border-radius:14px; }
+    .studio-panel h2 { margin:0 0 4px; font-family:'Press Start 2P',monospace; font-size:13px; letter-spacing:2px; color:#29faff; }
+    .studio-panel .studio-sub { font-family:'Press Start 2P',monospace; font-size:9px; color:rgba(234,246,255,.65); letter-spacing:1px; margin-bottom:14px; }
+    .studio-row { display:flex; align-items:center; gap:10px; margin:7px 0; }
+    .studio-row .t { width:38%; min-width:150px; font-family:'Press Start 2P',monospace; font-size:10px; color:#eaf6ff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .studio-row .bar { flex:1; height:14px; background:rgba(255,255,255,.08); border-radius:7px; overflow:hidden; }
+    .studio-row .bar i { display:block; height:100%; background:linear-gradient(90deg,#29faff,#7e57c2); border-radius:7px; }
+    .studio-row .n { width:64px; text-align:right; font-family:'Press Start 2P',monospace; font-size:10px; color:#ffe14d; }
+    .studio-days { display:flex; gap:8px; margin-top:16px; align-items:flex-end; }
+    .studio-day { flex:1; text-align:center; }
+    .studio-day .db { width:100%; background:rgba(41,250,255,.25); border:1px solid rgba(41,250,255,.5); border-radius:6px 6px 0 0; min-height:4px; }
+    .studio-day .dl { margin-top:6px; font-family:'Press Start 2P',monospace; font-size:8px; color:rgba(234,246,255,.6); }
+    .studio-day .dn { font-family:'Press Start 2P',monospace; font-size:8px; color:#ffe14d; margin-bottom:4px; }
+    .studio-loading { font-family:'Press Start 2P',monospace; font-size:10px; color:rgba(234,246,255,.6); letter-spacing:1px; padding:8px 0; }
   `;
   document.head.appendChild(extra);
 

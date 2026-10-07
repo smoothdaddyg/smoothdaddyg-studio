@@ -14,6 +14,12 @@
      bump(id)        increment the play count for a game id
      get(id)         count for one id (missing = 0)
      getAll()        {id: count} for every id in GAMES (missing = 0)
+     played(id)      THE shared "a play session started" event: bumps the
+                     local counter AND logs to the server (fire-and-forget).
+                     Games call this on replay/restart; the first tap of a
+                     visit is logged automatically (see autoPlay below).
+     globalStats()   Promise -> {ok, total, perGame, perDay, since} from the
+                     server, or null when unreachable. Owner dashboard only.
      sortByPlays(list, counts)  list sorted by plays desc; ties
                      keep their original relative order
      isStudio()      true if studio flag set or ?studio=1 in URL
@@ -174,18 +180,98 @@
   }
 
   // Auto-bump on game pages: /games/<id>/ or /games/<id>/index.html
+  var pageGameId = null;
   (function autoBump() {
     try {
       var path = String((typeof location !== "undefined" && location.pathname) || "");
       var m = path.match(/\/games\/([a-z0-9-]+)(?:\/|$)/i);
-      if (m && m[1]) bumpOnce(m[1]);
+      if (m && m[1]) { pageGameId = m[1]; bumpOnce(m[1]); }
     } catch (e) {
       /* never throw */
     }
   })();
 
+  // Where the API lives, relative to this game page (/games/<id>/ -> /).
+  function apiBase() {
+    try {
+      var p = String((typeof location !== "undefined" && location.pathname) || "");
+      var m = p.match(/^(.*\/)games\/[a-z0-9-]+(?:\/|$)/i);
+      if (m && m[1]) return m[1];
+    } catch (e) {
+      /* ignore */
+    }
+    return "/";
+  }
+
+  // The one shared "someone played" event. Fire-and-forget POST to the
+  // server log. Never throws, never blocks the game.
+  // (The local per-device counter is deliberately untouched: it keeps
+  // its v1 meaning of "times opened", while the server log counts
+  // actual play sessions.)
+  function played(id) {
+    if (!id) return;
+    try {
+      var url = apiBase() + "api/log-play.php";
+      var body = "game=" + encodeURIComponent(id);
+      var sent = false;
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        try {
+          sent = !!navigator.sendBeacon(url, new Blob([body], { type: "application/x-www-form-urlencoded" }));
+        } catch (e) {
+          sent = false;
+        }
+      }
+      if (!sent && typeof fetch === "function") {
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body,
+          keepalive: true,
+        }).catch(function () { /* offline — the local count stands */ });
+      }
+    } catch (e) {
+      /* analytics must never break the game */
+    }
+  }
+
+  // First tap of a visit = "pressed play". Games with explicit replay
+  // buttons call played(id) themselves on every replay; this covers the
+  // first session of every game with zero per-game code.
+  (function autoPlay() {
+    if (!pageGameId) return;
+    var fired = false;
+    function onFirst() {
+      if (fired) return;
+      fired = true;
+      try { window.removeEventListener("pointerdown", onFirst); } catch (e) {}
+      played(pageGameId);
+    }
+    try {
+      window.addEventListener("pointerdown", onFirst);
+    } catch (e) {
+      /* ignore */
+    }
+  })();
+
+  // Owner dashboard: global counts from the server. Resolves null when
+  // unreachable — the dashboard just shows local counts instead.
+  function globalStats() {
+    return new Promise(function (resolve) {
+      try {
+        fetch(apiBase() + "api/stats.php", { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { resolve(j && j.ok ? j : null); })
+          .catch(function () { resolve(null); });
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
   window.SDGplays = {
     bump: bump,
+    played: played,
+    globalStats: globalStats,
     get: get,
     getAll: getAll,
     sortByPlays: sortByPlays,

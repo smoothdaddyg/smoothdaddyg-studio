@@ -197,7 +197,7 @@
   function onDown(e) {
     audio.unlock && audio.unlock();
     var x = e.clientX, y = e.clientY;
-    if (state === "win" || state === "over") { reset(state === "win"); e.preventDefault(); return; }
+    if (state === "win" || state === "over") { if (window.SDGplays) SDGplays.played("blitz"); reset(state === "win"); e.preventDefault(); return; }
     if (state === "levelup") { e.preventDefault(); return; }
     var z = zoneAt(x, y);
     if (z) {

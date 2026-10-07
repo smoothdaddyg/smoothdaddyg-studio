@@ -11,3 +11,4 @@ Thumbs.db
 
 # Dependencies
 node_modules/
+api/data/plays.jsonl

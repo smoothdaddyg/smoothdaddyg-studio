@@ -804,9 +804,11 @@
     audio.unlock();
     if (state === "ready") { state = "play"; }
     else if (state === "win" && stateT > 6) {
+      if (window.SDGplays) SDGplays.played("missmunch");
       score = 0; shown = 0; shields = 3; level = 1;
       buildLevel(1); state = "ready"; parts = [];
     } else if (state === "over" && stateT > 0.8) {
+      if (window.SDGplays) SDGplays.played("missmunch");
       shields = 3; score = 0; shown = 0;
       buildLevel(level); state = "ready"; parts = [];
     }

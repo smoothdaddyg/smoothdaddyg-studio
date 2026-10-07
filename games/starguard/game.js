@@ -407,6 +407,7 @@
 
   function onTap(e) {
     if (state === "over" || state === "win") {
+      if (window.SDGplays) SDGplays.played("starguard");
       reset(); // tap anywhere to play again
       return;
     }

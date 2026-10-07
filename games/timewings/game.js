@@ -137,7 +137,7 @@
   /* ---------------- input: drag anywhere to rotate ---------------- */
   function onDown(e) {
     if (audio.unlock) audio.unlock();
-    if (state === "win" || state === "over") { reset(state === "win"); e.preventDefault(); return; }
+    if (state === "win" || state === "over") { if (window.SDGplays) SDGplays.played("timewings"); reset(state === "win"); e.preventDefault(); return; }
     if (state !== "play") { e.preventDefault(); return; }
     dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY;
     e.preventDefault();
