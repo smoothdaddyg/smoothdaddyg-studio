@@ -152,16 +152,18 @@
       step: 0, nextT: 0, playing: false,
       start: function (delay) {
         this.step = 0;
-        this.nextT = delay || 0.1;
+        this.nextT = null; // anchored to the update clock on first tick
+        this.delay = delay || 0.1;
         this.playing = true;
       },
       stop: function () { this.playing = false; },
       beatPhase: function () { return (this.step / stepsPerBeat) % 1; },
       update: function (now) {
         if (!this.playing) return;
+        if (this.nextT === null) this.nextT = now + this.delay;
         // schedule a little ahead so timing stays tight
         while (this.nextT < now + 0.25) {
-          this.playStep(this.step, this.nextT - now);
+          this.playStep(this.step, Math.max(0, Math.min(0.3, this.nextT - now)));
           this.step = (this.step + 1) % this.totalSteps;
           this.nextT += this.stepDur;
         }
@@ -390,15 +392,19 @@
     var s = d.size;
     ctx.save();
     ctx.translate(d.x, d.y - (d.jump || 0));
-    if (d.spin) ctx.rotate(d.spin * Math.PI * 2);
-    ctx.rotate(d.tilt || 0);
-    var crouchY = (d.crouch || 0) * 16 * s;
 
-    // shadow
+    // shadow stays planted while the body spins
     ctx.fillStyle = "rgba(0,0,0,0.28)";
     ctx.beginPath();
     ctx.ellipse(0, (d.jump || 0) + 3 * s, 20 * s * (1 - (d.jump || 0) / 160), 6 * s, 0, 0, 6.29);
     ctx.fill();
+
+    // spins pivot around the torso, not the feet
+    ctx.translate(0, -40 * s);
+    if (d.spin) ctx.rotate(d.spin * Math.PI * 2);
+    ctx.rotate(d.tilt || 0);
+    ctx.translate(0, 40 * s);
+    var crouchY = (d.crouch || 0) * 16 * s;
 
     var hipY = -34 * s + crouchY;
 
@@ -483,14 +489,14 @@
 
   /* ---- basic (8) ---- */
   MV("step-side", "basic", 1.2, function (t, d) {
-    d.x += Math.sin(t * Math.PI) * 26 * d.face; d.armL = 0.9; d.armR = -0.9;
+    d.x = d.hx + Math.sin(t * Math.PI) * 26 * d.face; d.armL = 0.9; d.armR = -0.9;
     d.legL = Math.sin(t * Math.PI) * 0.5; d.legR = -Math.sin(t * Math.PI) * 0.5;
   });
   MV("step-fwd", "basic", 1.2, function (t, d) {
     d.jump = Math.sin(t * Math.PI) * 6; d.armL = -0.6 + t * 0.4; d.armR = 0.6 - t * 0.4;
   });
   MV("shuffle", "basic", 1.4, function (t, d) {
-    d.x += Math.sin(t * TAU * 2) * 7; d.legL = Math.sin(t * TAU * 2) * 0.45; d.legR = -Math.sin(t * TAU * 2) * 0.45;
+    d.x = d.hx + Math.sin(t * TAU * 2) * 7; d.legL = Math.sin(t * TAU * 2) * 0.45; d.legR = -Math.sin(t * TAU * 2) * 0.45;
     d.armL = 0.5; d.armR = -0.5;
   });
   MV("kick", "basic", 1.0, function (t, d) {
@@ -505,7 +511,7 @@
     d.legR = -0.9 * Math.abs(Math.sin(t * TAU * 2)); d.armL = -0.8; d.armR = 0.8; d.tilt = Math.sin(t * TAU) * 0.08;
   });
   MV("sway", "basic", 1.6, function (t, d) {
-    d.tilt = Math.sin(t * TAU) * 0.22; d.armL = 1.4; d.armR = -1.4; d.x += Math.sin(t * TAU) * 10;
+    d.tilt = Math.sin(t * TAU) * 0.22; d.armL = 1.4; d.armR = -1.4; d.x = d.hx + Math.sin(t * TAU) * 10;
   });
   MV("bounce", "basic", 1.2, function (t, d, p, b) {
     d.jump = Math.abs(Math.sin(t * TAU * 2 + b)) * 16; d.armL = -2.4; d.armR = 2.4;
@@ -544,7 +550,7 @@
   });
   MV("jump-side", "jump", 1.1, function (t, d) {
     var k = Math.sin(t * Math.PI);
-    d.jump = k * 34; d.x += k * 40 * d.face; d.tilt = 0.25 * k * d.face;
+    d.jump = k * 34; d.x = d.hx + k * 40 * d.face; d.tilt = 0.25 * k * d.face;
   });
   MV("jump-spin", "jump", 1.4, function (t, d) {
     d.jump = Math.sin(t * Math.PI) * 48; d.spin = t; d.armL = -2.6; d.armR = 2.6;
@@ -563,12 +569,12 @@
     d.armL = -2.7 * k; d.armR = 2.7 * k; d.expr = k > 0.7 ? "wow" : "happy";
   });
   MV("slide", "floor", 1.3, function (t, d) {
-    d.x += 60 * d.face * t; d.crouch = 0.5 * Math.sin(t * Math.PI); d.tilt = -0.2 * d.face;
+    d.x = d.hx + 60 * d.face * t; d.crouch = 0.5 * Math.sin(t * Math.PI); d.tilt = -0.2 * d.face;
     d.legL = 0.7; d.legR = -0.3; d.armR = 1.4;
   });
   MV("knee-slide", "floor", 1.5, function (t, d) {
     var k = Math.sin(t * Math.PI);
-    d.x += 70 * d.face * t; d.crouch = 0.8 * k; d.armL = -2.9; d.armR = 2.9; d.expr = "wow";
+    d.x = d.hx + 70 * d.face * t; d.crouch = 0.8 * k; d.armL = -2.9; d.armR = 2.9; d.expr = "wow";
   });
   MV("floor-pose", "floor", 1.6, function (t, d) {
     var k = Math.min(1, t * 2.5);
@@ -630,12 +636,12 @@
 
   /* ---- comedy (10) ---- */
   MV("moonwalk", "comedy", 1.8, function (t, d) {
-    d.x -= 44 * d.face * t;
+    d.x = d.hx - 44 * d.face * t;
     d.legL = Math.sin(t * TAU * 3) * 0.6; d.legR = -Math.sin(t * TAU * 3) * 0.6;
     d.tilt = 0.12; d.armL = 0.7; d.armR = -0.7; d.expr = "proud";
   });
   MV("wiggle", "comedy", 1.4, function (t, d) {
-    d.x += Math.sin(t * TAU * 4) * 6; d.tilt = Math.sin(t * TAU * 4) * 0.3;
+    d.x = d.hx + Math.sin(t * TAU * 4) * 6; d.tilt = Math.sin(t * TAU * 4) * 0.3;
     d.armL = 1.2 + Math.sin(t * TAU * 4) * 0.5; d.armR = -1.2 - Math.sin(t * TAU * 4) * 0.5;
     d.expr = "laugh";
   });
@@ -654,7 +660,7 @@
     if (t > 0.55) { p.x = d.x + 34 * d.face; p.armL = -1.6; p.armR = -1.6; p.expr = "laugh"; }
   });
   MV("wrong-way", "comedy", 1.6, function (t, d, p) {
-    d.face = -p.face; d.x += Math.sin(t * Math.PI) * 20 * -d.face;
+    d.face = -p.face; d.x = d.hx + Math.sin(t * Math.PI) * 20 * -d.face;
     d.armL = 1.0; d.armR = -1.0; d.expr = "laugh";
   });
   MV("freeze", "comedy", 1.4, function (t, d) {
@@ -670,10 +676,10 @@
   });
   MV("chicken", "comedy", 1.6, function (t, d) {
     d.crouch = 0.45; d.armL = 1.9 + Math.sin(t * TAU * 4) * 0.4; d.armR = -1.9 - Math.sin(t * TAU * 4) * 0.4;
-    d.x += Math.sin(t * TAU * 2) * 5; d.expr = "laugh";
+    d.x = d.hx + Math.sin(t * TAU * 2) * 5; d.expr = "laugh";
   });
   MV("tiny-steps", "comedy", 1.4, function (t, d) {
-    d.x += 34 * d.face * t;
+    d.x = d.hx + 34 * d.face * t;
     d.legL = Math.sin(t * TAU * 6) * 0.7; d.legR = -Math.sin(t * TAU * 6) * 0.7;
     d.armL = -Math.sin(t * TAU * 6) * 0.7; d.armR = Math.sin(t * TAU * 6) * 0.7;
     d.crouch = 0.35; d.expr = "laugh";
@@ -1091,7 +1097,7 @@
   var spotTarget = null;    // x for spotlights to follow
   var buttons = [];         // score buttons
   var replayBtn = null, titleBtn = null;
-  var fanfareT = 0, fwT = 0;
+  var fanfareT = 0, fwT = 0, confT = 0, starT = 0;
   var winners = [];
 
   function floorY() { return H * 0.70; }
@@ -1281,6 +1287,10 @@
       m.t += dt;
       var t01 = clamp(m.t / m.dur, 0, 1);
       applyMove(ac, m, t01);
+      // safety net: dancers never leave the screen, whatever a move does
+      [ac.couple.a, ac.couple.b].forEach(function (d) {
+        d.x = clamp(d.x, 50, W - 50);
+      });
       if (spotTarget !== null) {
         // spotlight tracks the spinner
         spotTarget = m.who === 1 ? ac.couple.b.x : ac.couple.a.x;
@@ -1356,21 +1366,36 @@
           a6.couple.b.armR = -1.4 + Math.sin(now * 10) * 0.3;
         }
       });
-      // celebration fx + fanfare
+      // celebration fx + fanfare — make it WOW
       fanfareT -= dt;
       if (fanfareT <= 0) {
-        audio.arp([523, 659, 784, 1047, 1319], 0.09, "square", 0.13);
-        audio.tone(120, 0.12, { type: "sine", vol: 0.4, slideTo: 45 });
-        fanfareT = 1.1;
+        audio.arp([523, 659, 784, 1047, 1319, 1568], 0.08, "square", 0.14);
+        audio.tone(120, 0.14, { type: "sine", vol: 0.5, slideTo: 45 });
+        audio.noise(0.5, { vol: 0.14, filter: "highpass", freq: 1200 }); // crowd roar
+        flashT = 0.22;
+        fanfareT = 0.9;
       }
       fwT -= dt;
       if (fwT <= 0) {
-        firework(rnd(W * 0.15, W * 0.85), rnd(H * 0.1, H * 0.35));
-        if (chance(0.6)) confettiBurst(30);
-        if (chance(0.5)) balloon(rnd(W * 0.1, W * 0.9));
-        fwT = 0.7;
+        firework(rnd(W * 0.08, W * 0.92), rnd(H * 0.06, H * 0.38));
+        firework(rnd(W * 0.08, W * 0.92), rnd(H * 0.06, H * 0.38));
+        if (chance(0.7)) balloon(rnd(W * 0.1, W * 0.9));
+        fwT = 0.38;
       }
-      if (stateT > 8) { state = "replay"; stateT = 0; layoutReplay(); }
+      confT -= dt;
+      if (confT <= 0) {
+        confettiBurst(45);
+        confT = 0.45;
+      }
+      starT -= dt;
+      if (starT <= 0) {
+        winners.forEach(function (w) {
+          sparkle(w.couple.a.x, floorY() - 130, "#fff3b0");
+          sparkle(w.couple.b.x, floorY() - 130, "#ffd23b");
+        });
+        starT = 0.3;
+      }
+      if (stateT > 10) { state = "replay"; stateT = 0; layoutReplay(); }
     } else if (state === "replay") {
       show.acts.forEach(function (a7, i) {
         var beat4 = (now % 1) + i * 0.3;
@@ -1536,7 +1561,7 @@
         } else { ctx.fillStyle = "#fff"; }
         drawPixelNumber(ctx, a2.score, 0, 0, 7, isW ? "#7a0e2e" : "#ffffff", true);
         ctx.restore();
-        if (isW && (state === "winner" || state === "replay")) drawTrophy(cx, H * 0.30, 1.1, t);
+        if (isW && (state === "winner" || state === "replay")) drawTrophy(cx, H * 0.28, 1.45, t);
       });
       ctx.textAlign = "left";
     }

@@ -106,7 +106,6 @@
         ${chip}
         <div class="card-art" style="${artStyle(g.hue)}">
           <img src="games/${g.id}/cover.webp" alt="" loading="lazy" data-cover />
-          ${spriteSVG(g.sprite, neon(g.hue))}
         </div>
         <div class="card-body">
           <h3>${g.title}</h3>
