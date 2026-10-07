@@ -29,119 +29,36 @@
   var audio = makeAudio();
 
   /* ---------------- mazes ---------------- */
-  var COLS = 19, ROWS = 15;
+  var COLS = 13, ROWS = 11;
   // # wall, . dot, o power pellet, P player start, G monster house,
-  // - house door, space walkable (no dot, incl. tunnels)
+  // - house door, space walkable (no dot)
+  // Small on purpose: very few paths, thick chunky walls, fills the screen.
+  var MAZE_GRID = [
+    "#############",
+    "#.....#.....#",
+    "#.###.#.###.#",
+    "#o#.......#o#",
+    "#.#.#####.#.#",
+    "#...#GGG#...#",
+    "#...#---#...#",
+    "#.##.....##.#",
+    "#.....P.....#",
+    "#o.........o#",
+    "#############",
+  ];
   var MAZES = [
-    {
-      pal: ["#ff3b30", "#ff8ac2", "#35c4ff", "#ffb340"],
-      grid: [
-        "###################",
-        "#........#........#",
-        "#.##.###.#.###.##.#",
-        "#o...............o#",
-        "#.##.#.#####.#.##.#",
-        "#....#...#...#....#",
-        "####.###.#.###.####",
-        "####.#.......#.####",
-        "####.#.##-##.#.####",
-        "#......#GGG#......#",
-        "####.#.#####.#.####",
-        "#........#........#",
-        "#.##.###.#.###.##.#",
-        "#o.#.....P.....#.o#",
-        "###################",
-      ],
-    },
-    {
-      pal: ["#b45cff", "#5cff8a", "#ffd23b", "#3b8aff"],
-      grid: [
-        "###################",
-        "#..#.....#.....#..#",
-        "#.##.###.#.###.##.#",
-        "#o...#.......#...o#",
-        "##.#.#.#####.#.#.##",
-        "#....#...#...#....#",
-        "#.##.###.#.###.##.#",
-        " ...#.........#... ",
-        "####.#.##-##.#.####",
-        "#......#GGG#......#",
-        "####.#.#####.#.####",
-        "#........#........#",
-        "#.##.###.#.###.##.#",
-        "#o.#.....P.....#.o#",
-        "###################",
-      ],
-    },
-    {
-      pal: ["#ff5c5c", "#c2ff5c", "#5cffc2", "#5c8aff"],
-      grid: [
-        "###################",
-        "#........#........#",
-        "#.######.#.######.#",
-        "#o#....#.#.#....#o#",
-        "#.#.##.#.#.#.##.#.#",
-        "#...#..#.#.#..#...#",
-        "###.#.##.#.##.#.###",
-        "#.....#.....#.....#",
-        "####.#.##-##.#.####",
-        "#......#GGG#......#",
-        "####.#.#####.#.####",
-        "#........#........#",
-        "#.##.###.#.###.##.#",
-        "#o.#.....P.....#.o#",
-        "###################",
-      ],
-    },
-    {
-      pal: ["#ff8a3b", "#8a5cff", "#5cff5c", "#ff5c8a"],
-      grid: [
-        "###################",
-        "#........#........#",
-        "#.####.#.#.#.####.#",
-        "#o...............o#",
-        "#.#....#####....#.#",
-        "#.....#.....#.....#",
-        "#####.##.#.##.#####",
-        " ................. ",
-        "####.#.##-##.#.####",
-        "#......#GGG#......#",
-        "####.#.#####.#.####",
-        "#........#........#",
-        "#.##.###.#.###.##.#",
-        "#o.#.....P.....#.o#",
-        "###################",
-      ],
-    },
-    {
-      pal: ["#ff3bd4", "#d4ff3b", "#3bffd4", "#8a8aff"],
-      grid: [
-        "###################",
-        "#.#....#.#....#.#.#",
-        "#.#.##.#.#.#.##.#.#",
-        "#o..#.....#.....#o#",
-        "##.#.#.#...#.#.##.#",
-        "#.....#.....#.....#",
-        "#.###.#.#.#.#.###.#",
-        "#.....#.....#.....#",
-        "####.#.##-##.#.####",
-        "#......#GGG#......#",
-        "####.#.#####.#.####",
-        "#........#........#",
-        "#.##.###.#.###.##.#",
-        "#o.#.....P.....#.o#",
-        "###################",
-      ],
-    },
+    { pal: ["#ff5c7a", "#ffb340", "#35c4ff", "#7dff6a"], grid: MAZE_GRID },
+    { pal: ["#b45cff", "#5cff8a", "#ffd23b", "#3b8aff"], grid: MAZE_GRID },
+    { pal: ["#ff8a3b", "#8a5cff", "#5cff5c", "#ff5c8a"], grid: MAZE_GRID },
   ];
   var LEVELS = MAZES.length;
 
   function levelParams(l) {
     return {
-      ghostSpeed: 5.3 + 0.45 * (l - 1),   // monsters get faster every level
-      playerSpeed: 7.0,
-      frightTime: 6.5 - 0.6 * (l - 1),    // power pellets wear off sooner
-      releaseGap: Math.max(0.7, 2.2 - 0.35 * (l - 1)),
+      ghostSpeed: 4.6 + 0.4 * (l - 1),    // monsters get faster every level
+      playerSpeed: 6.8,
+      frightTime: 7 - 0.5 * (l - 1),      // power pellets wear off sooner
+      releaseGap: Math.max(0.9, 2.4 - 0.4 * (l - 1)),
     };
   }
 
@@ -165,9 +82,10 @@
   var ts = 20, ox = 0, oy = 0;
   var wallCache = null;
   function layout() {
-    ts = Math.floor(Math.min(W / COLS, (H - 180) / ROWS));
+    // the maze fills the ENTIRE screen — no reserved HUD band
+    ts = Math.floor(Math.min(W / COLS, H / ROWS));
     ox = Math.round((W - ts * COLS) / 2);
-    oy = Math.round(96 + (H - 180 - ts * ROWS) / 2);
+    oy = Math.round((H - ts * ROWS) / 2);
     wallCache = null;
   }
 
@@ -190,7 +108,7 @@
     for (var r = 0; r < ROWS; r++)
       for (var c = 0; c < COLS; c++)
         if (grid[r][c] === ch) return { x: c, y: r };
-    return { x: 9, y: 7 };
+    return { x: 6, y: 8 };
   }
 
   function buildLevel(lv) {
@@ -211,10 +129,10 @@
     player = { x: ps.x, y: ps.y, dir: { x: 0, y: 0 }, want: { x: -1, y: 0 }, mouth: 0, speed: P.playerSpeed };
     ghosts = [];
     var pal = MAZES[lv - 1].pal;
-    var homes = [8, 9, 10, 9];
+    var homes = [5, 6, 7, 6];
     for (var i = 0; i < 4; i++) {
       ghosts.push({
-        x: homes[i], y: 9, dir: { x: -1, y: 0 }, mode: "house",
+        x: homes[i], y: 5, dir: { x: -1, y: 0 }, mode: "house",
         color: pal[i], pers: i, releaseT: i * P.releaseGap,
         bob: Math.random() * 6.28, speed: P.ghostSpeed,
       });
@@ -227,10 +145,10 @@
     var ps = findChar("P");
     player.x = ps.x; player.y = ps.y;
     player.dir = { x: 0, y: 0 }; player.want = { x: -1, y: 0 };
-    var homes = [8, 9, 10, 9];
+    var homes = [5, 6, 7, 6];
     for (var i = 0; i < ghosts.length; i++) {
       var g = ghosts[i];
-      g.x = homes[i]; g.y = 9; g.dir = { x: -1, y: 0 };
+      g.x = homes[i]; g.y = 5; g.dir = { x: -1, y: 0 };
       g.mode = "house"; g.releaseT = i * P.releaseGap; g.speed = P.ghostSpeed;
     }
     frightT = 0; fruit = null;
@@ -278,7 +196,7 @@
     if (!opts.length) { g.dir = { x: -g.dir.x, y: -g.dir.y }; return; }
     var pick;
     if (eyes) {
-      pick = minDistOpt(opts, cx, cy, 9, 8);            // eyes fly home to the door
+      pick = minDistOpt(opts, cx, cy, 6, 5);            // eyes fly home to the house
     } else if (frightT > 0) {
       pick = opts[(Math.random() * opts.length) | 0];   // scared: run anywhere
     } else {
@@ -465,16 +383,16 @@
           g.releaseT -= dt;
           if (g.releaseT <= 0) g.mode = "leaving";
         } else if (g.mode === "leaving") {
-          // scoot to the door, then out
+          // scoot to the door, then out (door is below the house)
           var sp = g.speed * dt;
-          if (Math.abs(g.x - 9) > 0.08) g.x += Math.sign(9 - g.x) * Math.min(sp, Math.abs(9 - g.x));
-          else if (g.y > 7.02) g.y -= sp;
-          else { g.y = 7; g.mode = "active"; g.dir = { x: -1, y: 0 }; }
+          if (Math.abs(g.x - 6) > 0.08) g.x += Math.sign(6 - g.x) * Math.min(sp, Math.abs(6 - g.x));
+          else if (g.y < 5.98) g.y += sp;
+          else { g.y = 6; g.mode = "active"; g.dir = { x: 0, y: 1 }; }
         } else {
           g.speed = (g.mode === "eyes" ? 11 : P.ghostSpeed) * (frightT > 0 && g.mode === "active" ? 0.72 : 1);
           stepEntity(g, dt, false);
-          if (g.mode === "eyes" && Math.abs(g.x - 9) < 0.25 && Math.abs(g.y - 8) < 0.25) {
-            g.x = 9; g.y = 8; g.mode = "leaving";
+          if (g.mode === "eyes" && Math.abs(g.x - 6) < 0.25 && Math.abs(g.y - 5) < 0.25) {
+            g.x = 6; g.y = 5; g.mode = "leaving";
           }
         }
 
@@ -542,66 +460,100 @@
   }
 
   function renderWalls() {
+    // chunky toy bricks: deep purple blocks with a bright rounded cap
     wallCache = document.createElement("canvas");
     wallCache.width = COLS * ts; wallCache.height = ROWS * ts;
     var c = wallCache.getContext("2d");
+    var inset = Math.max(2, ts * 0.10);
     for (var r = 0; r < ROWS; r++) {
       for (var q = 0; q < COLS; q++) {
         if (grid[r][q] !== "#") continue;
-        c.fillStyle = "#101a5e";
-        c.fillRect(q * ts, r * ts, ts, ts);
+        var x = q * ts, y = r * ts;
+        c.fillStyle = "#241d5e";
+        c.fillRect(x, y, ts, ts);
+        // rounded bright cap
+        c.fillStyle = "#6f5bff";
+        var rad = ts * 0.22;
+        c.beginPath();
+        c.moveTo(x + inset + rad, y + inset);
+        c.arcTo(x + ts - inset, y + inset, x + ts - inset, y + ts - inset, rad);
+        c.arcTo(x + ts - inset, y + ts - inset, x + inset, y + ts - inset, rad);
+        c.arcTo(x + inset, y + ts - inset, x + inset, y + inset, rad);
+        c.arcTo(x + inset, y + inset, x + ts - inset, y + inset, rad);
+        c.closePath(); c.fill();
+        // glossy top highlight
+        c.fillStyle = "rgba(255,255,255,0.28)";
+        c.beginPath();
+        c.moveTo(x + inset + rad, y + inset);
+        c.arcTo(x + ts - inset, y + inset, x + ts - inset, y + inset + ts * 0.30, rad * 0.6);
+        c.lineTo(x + inset, y + inset + ts * 0.30);
+        c.arcTo(x + inset, y + inset, x + inset + rad, y + inset, rad * 0.6);
+        c.closePath(); c.fill();
       }
     }
-    c.strokeStyle = "#4d7cff"; c.lineWidth = Math.max(2, ts * 0.09);
-    c.beginPath();
-    for (var r2 = 0; r2 < ROWS; r2++) {
-      for (var q2 = 0; q2 < COLS; q2++) {
-        if (grid[r2][q2] !== "#") continue;
-        var x = q2 * ts, y = r2 * ts;
-        var open = function (cc, rr) {
-          if (rr < 0 || rr >= ROWS) return true;
-          cc = ((cc % COLS) + COLS) % COLS;
-          return grid[rr][cc] !== "#";
-        };
-        if (open(q2, r2 - 1)) { c.moveTo(x, y + 1); c.lineTo(x + ts, y + 1); }
-        if (open(q2, r2 + 1)) { c.moveTo(x, y + ts - 1); c.lineTo(x + ts, y + ts - 1); }
-        if (open(q2 - 1, r2)) { c.moveTo(x + 1, y); c.lineTo(x + 1, y + ts); }
-        if (open(q2 + 1, r2)) { c.moveTo(x + ts - 1, y); c.lineTo(x + ts - 1, y + ts); }
-      }
-    }
-    c.stroke();
   }
 
   function drawMunch(px, py, r, dir, mouthPhase, happy) {
-    var ang = Math.atan2(dir.y, dir.x);
-    var mo = (0.16 + 0.14 * Math.abs(Math.sin(mouthPhase))) * Math.PI;
-    ctx.fillStyle = "#ffeb3b";
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.arc(px, py, r, ang + mo, ang + Math.PI * 2 - mo);
-    ctx.closePath(); ctx.fill();
+    // Miss Munch: a cute round girl face. Her big smile opens and
+    // closes as she munches (mouthPhase), leaning toward her direction.
+    var mx = px + dir.x * r * 0.18, my = py + dir.y * r * 0.18;
+    // pigtails
+    ctx.fillStyle = "#8a5a2b";
+    ctx.beginPath(); ctx.arc(px - r * 0.92, py - r * 0.30, r * 0.34, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + r * 0.92, py - r * 0.30, r * 0.34, 0, 6.29); ctx.fill();
+    ctx.fillStyle = "#ff5c7a";
+    ctx.beginPath(); ctx.arc(px - r * 0.92, py - r * 0.30, r * 0.13, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + r * 0.92, py - r * 0.30, r * 0.13, 0, 6.29); ctx.fill();
+    // face
+    ctx.fillStyle = "#ffd9b3";
+    ctx.beginPath(); ctx.arc(px, py, r, 0, 6.29); ctx.fill();
+    // hair fringe
+    ctx.fillStyle = "#a06a35";
+    ctx.beginPath(); ctx.arc(px, py - r * 0.12, r * 0.94, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
     // her bow stays on top
+    var bw = r * 0.52;
     ctx.fillStyle = "#ff3b6b";
-    var bw = r * 0.55;
     ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.75);
-    ctx.lineTo(px - bw, py - r * 1.35); ctx.lineTo(px - bw * 0.2, py - r * 0.95);
+    ctx.moveTo(px, py - r * 0.78);
+    ctx.lineTo(px - bw, py - r * 1.32); ctx.lineTo(px - bw * 0.2, py - r * 0.92);
     ctx.closePath(); ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.75);
-    ctx.lineTo(px + bw, py - r * 1.35); ctx.lineTo(px + bw * 0.2, py - r * 0.95);
+    ctx.moveTo(px, py - r * 0.78);
+    ctx.lineTo(px + bw, py - r * 1.32); ctx.lineTo(px + bw * 0.2, py - r * 0.92);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#d41e4e";
-    ctx.beginPath(); ctx.arc(px, py - r * 0.95, r * 0.18, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px, py - r * 0.94, r * 0.17, 0, 6.29); ctx.fill();
+    // big friendly eyes
+    var ex = r * 0.34, ey = -r * 0.08;
+    for (var s2 = -1; s2 <= 1; s2 += 2) {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(mx + s2 * ex - dir.x * r * 0.1, my + ey, r * 0.22, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#3a2a1a";
+      ctx.beginPath(); ctx.arc(mx + s2 * ex + dir.x * r * 0.06, my + ey + r * 0.04, r * 0.11, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(mx + s2 * ex + dir.x * r * 0.06 - r * 0.03, my + ey, r * 0.04, 0, 6.29); ctx.fill();
+    }
+    // rosy cheeks
+    ctx.fillStyle = "rgba(255,120,150,0.55)";
+    ctx.beginPath(); ctx.arc(mx - r * 0.52, my + r * 0.28, r * 0.17, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx + r * 0.52, my + r * 0.28, r * 0.17, 0, 6.29); ctx.fill();
+    // the munching smile: opens and closes with mouthPhase
+    var mo = 0.25 + 0.75 * Math.abs(Math.sin(mouthPhase));
+    ctx.fillStyle = "#7a2e2e";
+    ctx.beginPath();
+    ctx.ellipse(mx + dir.x * r * 0.12, my + r * 0.42 + dir.y * r * 0.1, r * 0.30, r * 0.30 * mo + r * 0.05, 0, 0, 6.29);
+    ctx.fill();
     if (happy) {
-      ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(px - r * 0.35, py - r * 0.25, r * 0.12, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(mx - r * 0.30, my - r * 0.32, r * 0.09, 0, 6.29); ctx.fill();
     }
   }
 
   function drawGhost(g) {
+    // Grumpy blobs: chunky round bodies with stubby feet — no ghost
+    // skirt anywhere. Angry brows when chasing, dizzy when frightened.
     var px = ox + g.x * ts, py = oy + g.y * ts;
-    var r = ts * 0.42;
+    var r = ts * 0.46;
     var fright = frightT > 0 && g.mode === "active";
     var flash = fright && frightT < 1.5 && ((frightT * 6) | 0) % 2 === 0;
     if (g.mode === "eyes") {
@@ -609,26 +561,51 @@
       return;
     }
     var yb = py + (g.mode === "house" ? Math.sin(g.bob) * ts * 0.08 : 0);
-    ctx.fillStyle = fright ? (flash ? "#ffffff" : "#3d5afe") : g.color;
+    var body = fright ? (flash ? "#ffffff" : "#3d5afe") : g.color;
+    // stubby feet
+    ctx.fillStyle = body;
+    var fw = r * 0.42;
+    roundRect(px - r * 0.62, yb + r * 0.52, fw, r * 0.42, r * 0.2); ctx.fill();
+    roundRect(px + r * 0.62 - fw, yb + r * 0.52, fw, r * 0.42, r * 0.2); ctx.fill();
+    // round body
+    ctx.beginPath(); ctx.arc(px, yb, r, 0, 6.29); ctx.fill();
+    // lighter belly
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.beginPath(); ctx.ellipse(px, yb + r * 0.42, r * 0.55, r * 0.38, 0, 0, 6.29); ctx.fill();
+    // little horns
+    ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.arc(px, yb - r * 0.1, r, Math.PI, 0);
-    ctx.lineTo(px + r, yb + r * 0.72);
-    for (var i = 0; i < 4; i++) {
-      ctx.lineTo(px + r - (i + 0.5) * (r / 2), yb + r * 0.72 - (i % 2 ? r * 0.28 : 0));
-    }
-    ctx.lineTo(px - r, yb + r * 0.72);
+    ctx.moveTo(px - r * 0.55, yb - r * 0.72); ctx.lineTo(px - r * 0.38, yb - r * 1.08); ctx.lineTo(px - r * 0.22, yb - r * 0.70);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(px + r * 0.55, yb - r * 0.72); ctx.lineTo(px + r * 0.38, yb - r * 1.08); ctx.lineTo(px + r * 0.22, yb - r * 0.70);
     ctx.closePath(); ctx.fill();
     if (fright) {
+      // dizzy: dot eyes + wavy mouth
       ctx.fillStyle = flash ? "#3d5afe" : "#ffd7e6";
-      ctx.beginPath(); ctx.arc(px - r * 0.32, yb - r * 0.25, r * 0.14, 0, 6.29); ctx.fill();
-      ctx.beginPath(); ctx.arc(px + r * 0.32, yb - r * 0.25, r * 0.14, 0, 6.29); ctx.fill();
-      ctx.strokeStyle = flash ? "#3d5afe" : "#ffd7e6"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px - r * 0.30, yb - r * 0.18, r * 0.11, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + r * 0.30, yb - r * 0.18, r * 0.11, 0, 6.29); ctx.fill();
+      ctx.strokeStyle = flash ? "#3d5afe" : "#ffd7e6"; ctx.lineWidth = Math.max(2, r * 0.09);
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(px - r * 0.5, yb + r * 0.25);
-      for (var k = 0; k < 4; k++) ctx.lineTo(px - r * 0.5 + (k + 0.5) * r * 0.25, yb + r * 0.25 + (k % 2 ? -3 : 3));
+      ctx.moveTo(px - r * 0.45, yb + r * 0.38);
+      for (var k = 0; k < 4; k++) ctx.lineTo(px - r * 0.45 + (k + 0.5) * r * 0.225, yb + r * 0.38 + (k % 2 ? -r * 0.1 : r * 0.1));
       ctx.stroke();
     } else {
-      drawEyes(px, yb - r * 0.1, r, g.dir, "#fff");
+      // grumpy: big eyes with angry brows + frown
+      drawEyes(px, yb - r * 0.12, r, g.dir, "#fff");
+      ctx.strokeStyle = "rgba(30,20,40,0.85)"; ctx.lineWidth = Math.max(3, r * 0.13);
+      ctx.lineCap = "round";
+      var ex2 = r * 0.34;
+      ctx.beginPath(); // left brow slants down toward center
+      ctx.moveTo(px - ex2 - r * 0.26, yb - r * 0.62); ctx.lineTo(px - ex2 + r * 0.22, yb - r * 0.44);
+      ctx.stroke();
+      ctx.beginPath(); // right brow
+      ctx.moveTo(px + ex2 + r * 0.26, yb - r * 0.62); ctx.lineTo(px + ex2 - r * 0.22, yb - r * 0.44);
+      ctx.stroke();
+      ctx.beginPath(); // frown
+      ctx.arc(px, yb + r * 0.72, r * 0.30, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
     }
   }
 
@@ -706,10 +683,10 @@
       // monsters as spinning stars orbiting the middle
       for (var si = 0; si < ghosts.length; si++) {
         var sa = stateT * 2.2 + si * Math.PI / 2;
-        drawStar(ox + 9 * ts + Math.cos(sa) * ts * 3.2, oy + 7 * ts + Math.sin(sa) * ts * 2.2,
+        drawStar(ox + 6 * ts + Math.cos(sa) * ts * 2.6, oy + 5 * ts + Math.sin(sa) * ts * 1.8,
                  ts * 0.5, stateT * 5 + si, ghosts[si].color);
       }
-      drawMunch(ox + 9 * ts, oy + 7 * ts + Math.sin(stateT * 8) * ts * 0.2,
+      drawMunch(ox + 6 * ts, oy + 5 * ts + Math.sin(stateT * 8) * ts * 0.2,
                 ts * 0.5, { x: 1, y: 0 }, stateT * 14, true);
     } else {
       // Miss Munch
@@ -766,31 +743,53 @@
   }
 
   function drawHUD() {
-    // score
-    drawPixelNumber(ctx, Math.floor(shown), 90, 44, 4, "#ffffff", false);
-    // shields: little munch heads
+    // floating overlay HUD — the maze fills the whole screen underneath
+    ctx.save();
+    // score pill, top-left
+    ctx.fillStyle = "rgba(6,8,28,0.62)";
+    roundRect(10, 10, 108, 40, 12); ctx.fill();
+    drawPixelNumber(ctx, Math.floor(shown), 64, 30, 4, "#ffffff", true);
+    // lives: tiny munch faces, top-right
     for (var s = 0; s < 3; s++) {
-      var sx = W - 40 - s * 34, sy = 44;
+      var hx = W - 30 - s * 40, hy = 30;
       if (s < shields) {
-        ctx.fillStyle = "#ffeb3b";
-        ctx.beginPath(); ctx.arc(sx, sy, 11, 0.5, Math.PI * 2 - 0.5); ctx.lineTo(sx, sy); ctx.fill();
+        drawMiniMunch(hx, hy, 13);
       } else {
         ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(sx, sy, 11, 0, 6.29); ctx.stroke();
+        ctx.beginPath(); ctx.arc(hx, hy, 13, 0, 6.29); ctx.stroke();
       }
     }
-    // level pips
+    // level pips, top-center
+    var pw = LEVELS * 26;
+    ctx.fillStyle = "rgba(6,8,28,0.62)";
+    roundRect(W / 2 - pw / 2 - 10, 10, pw + 20, 40, 12); ctx.fill();
     for (var l = 0; l < LEVELS; l++) {
       ctx.fillStyle = l < level ? "#ffd740" : "rgba(255,255,255,0.25)";
-      var lx = W / 2 - (LEVELS * 26) / 2 + l * 26;
-      roundRect(lx, 34, 18, 18, 5); ctx.fill();
+      var lx = W / 2 - pw / 2 + l * 26;
+      roundRect(lx, 22, 18, 18, 5); ctx.fill();
     }
-    // dots left: a little row of dots
-    var n = Math.min(20, dotsLeft);
-    ctx.fillStyle = "#ffc78f";
-    for (var d = 0; d < n; d++) {
-      ctx.beginPath(); ctx.arc(90 + d * 16, 74, 3.5, 0, 6.29); ctx.fill();
-    }
+    ctx.restore();
+  }
+
+  function drawMiniMunch(x, y, r) {
+    ctx.fillStyle = "#ffd9b3";
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill();
+    ctx.fillStyle = "#a06a35";
+    ctx.beginPath(); ctx.arc(x, y - r * 0.12, r * 0.94, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    ctx.fillStyle = "#ff3b6b";
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 0.78);
+    ctx.lineTo(x - r * 0.5, y - r * 1.3); ctx.lineTo(x - r * 0.1, y - r * 0.9);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 0.78);
+    ctx.lineTo(x + r * 0.5, y - r * 1.3); ctx.lineTo(x + r * 0.1, y - r * 0.9);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#3a2a1a";
+    ctx.beginPath(); ctx.arc(x - r * 0.32, y - r * 0.05, r * 0.13, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r * 0.32, y - r * 0.05, r * 0.13, 0, 6.29); ctx.fill();
+    ctx.fillStyle = "#7a2e2e";
+    ctx.beginPath(); ctx.ellipse(x, y + r * 0.42, r * 0.3, r * 0.18, 0, 0, 6.29); ctx.fill();
   }
 
   /* ---------------- input: swipe anywhere to steer ---------------- */
@@ -864,6 +863,7 @@
     ghostTarget: function (g) { return ghostTarget(g); },
     _setPlayer: function (p) { player = p; },
     _player: function () { return player; },
+    _ghosts: function () { return ghosts; },
     _setFright: function (t) { frightT = t; },
     _frame: function (dt) { update(dt); draw(); },
     _press: press,
