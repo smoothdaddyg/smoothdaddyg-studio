@@ -1616,10 +1616,15 @@
     }
   }
 
+  function hatsActs() {
+    if (!show) return [];
+    if (state === "results" || state === "suspense" || state === "winner" || state === "replay") return show.acts;
+    var c = currentAct();
+    return c ? [c] : [];
+  }
   function drawFlyingHats() {
     if (!show) return;
-    var acts = state === "results" || state === "winner" || state === "replay" ? show.acts : [currentAct()];
-    acts.forEach(function (a) {
+    hatsActs().forEach(function (a) {
       [a.couple.a, a.couple.b].forEach(function (d) {
         if (d.hatFly > 0.05 && d.hat) {
           var hx = d.x + 30 * d.face, hy = d.y - 120 * d.hatFly;
@@ -1649,7 +1654,7 @@
     drawSpotlights(t);
 
     // dancers
-    if (show && (state === "results" || state === "winner" || state === "replay")) {
+    if (show && (state === "results" || state === "suspense" || state === "winner" || state === "replay")) {
       show.acts.forEach(function (a) {
         drawDancer(a.couple.a); drawDancer(a.couple.b);
       });
@@ -1782,6 +1787,7 @@
     _state: function (s) { if (s !== undefined) state = s; return state; },
     _show: function () { return show; },
     _newShow: newShow,
+    _hatsActs: hatsActs,
     _winnerOf: function (scores) {
       var max = Math.max.apply(null, scores);
       return scores.map(function (s2, i) { return s2 === max ? i : -1; }).filter(function (i) { return i >= 0; });
