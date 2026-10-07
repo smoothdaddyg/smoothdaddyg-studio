@@ -1,8 +1,11 @@
 /* ============================================================
-   SmoothDaddyG — Time Wings
-   A simple love letter to Time Pilot: drag anywhere to steer,
-   your plane fires on its own. Four eras — 1910, 1940, 1970,
-   1983 — each ending in a big boss ship.
+   SmoothDaddyG — Time Wings (redesign 2026-10-07)
+   A love letter to the original Time Pilot: YOUR plane stays
+   fixed in the middle of the screen. Drag anywhere and the
+   plane rotates to face your finger — the WORLD (clouds,
+   islands, stars) streams past underneath to sell the motion.
+   Big chunky 2x graphics, gentler difficulty. Four eras —
+   1910, 1940, 1970, 1983 — each ending in a big boss ship.
    ============================================================ */
 (function () {
   "use strict";
@@ -16,22 +19,26 @@
   /* ---------------- tuning ---------------- */
   var PLAYER_SPEED = 275;
   var TURN_RATE = 4.6;       // rad/sec the nose can swing
-  var FIRE_CD = 0.26;
+  var FIRE_CD = 0.22;
   var BULLET_SPEED = 640;
   var MAX_SHIELDS = 3;
   var INVULN = 1.6;
+  var SPR = 2;               // global sprite scale — chunky and playful
   var ERAS = [
-    { year: 1910, quota: 10, esp: 125, fire: 0,    wob: 0.6, body: "#8d6e63", dark: "#5d4037", bossHp: 6 },
-    { year: 1940, quota: 12, esp: 175, fire: 3.2,  wob: 1.0, body: "#546e7a", dark: "#37474f", bossHp: 8 },
-    { year: 1970, quota: 14, esp: 235, fire: 2.3,  wob: 1.8, body: "#90a4ae", dark: "#546e7a", bossHp: 10 },
-    { year: 1983, quota: 16, esp: 205, fire: 1.8,  wob: 2.6, body: "#7e57c2", dark: "#4527a0", bossHp: 12 }
+    { year: 1910, quota: 10, esp: 125, fire: 0,   wob: 0.6, body: "#8d6e63", dark: "#5d4037", bossHp: 6 },
+    { year: 1940, quota: 12, esp: 175, fire: 3.2, wob: 1.0, body: "#546e7a", dark: "#37474f", bossHp: 8 },
+    { year: 1970, quota: 14, esp: 235, fire: 2.3, wob: 1.8, body: "#90a4ae", dark: "#546e7a", bossHp: 10 },
+    { year: 1983, quota: 16, esp: 205, fire: 1.8, wob: 2.6, body: "#7e57c2", dark: "#4527a0", bossHp: 12 }
   ];
 
   /* ---------------- state ---------------- */
+  // The player lives in WORLD coordinates; the camera is glued to
+  // the player, so on screen the plane never leaves the center.
   var state = "play";        // play | clear | win | over
   var level = 1;             // 1..4
   var player = { x: 0, y: 0, hd: -Math.PI / 2 };
-  var bullets = [], ebullets = [], enemies = [], parts = [], clouds = [], stars = [], pickups = [];
+  var camX = 0, camY = 0;    // world coords shown at screen center
+  var bullets = [], ebullets = [], enemies = [], parts = [], clouds = [], stars = [], pickups = [], grounds = [];
   var boss = null;
   var killed = 0;
   var score = 0, shown = 0;
@@ -42,6 +49,10 @@
 
   function era() { return ERAS[level - 1]; }
 
+  // screen position of a world point
+  function sx(wx) { return wx - camX + W / 2; }
+  function sy(wy) { return wy - camY + H / 2; }
+
   function resize() {
     DPR = Math.min(2, window.devicePixelRatio || 1);
     W = window.innerWidth; H = window.innerHeight;
@@ -50,19 +61,38 @@
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (!player.x) { player.x = W / 2; player.y = H / 2; }
-    player.x = Math.min(Math.max(player.x, 30), W - 30);
-    player.y = Math.min(Math.max(player.y, 90), H - 30);
     seedClouds();
+    seedGround();
   }
 
+  // Clouds tile seamlessly around the camera: each cloud has a fixed
+  // offset in tile space, wrapped against the camera every frame.
   function seedClouds() {
     clouds = [];
-    var n = Math.max(10, Math.floor(W * H / 45000));
+    var n = Math.max(12, Math.floor(W * H / 38000));
     for (var i = 0; i < n; i++) {
       clouds.push({
-        x: Math.random() * W, y: Math.random() * H,
-        s: 0.5 + Math.random() * 1.1, v: 14 + Math.random() * 26
+        ox: Math.random(), oy: Math.random(),
+        s: 0.7 + Math.random() * 1.1, v: 10 + Math.random() * 18
+      });
+    }
+    stars = [];
+    for (var s = 0; s < 90; s++) {
+      stars.push({
+        ox: Math.random(), oy: Math.random(),
+        par: s < 45 ? 0.3 : 0.6, tw: Math.random() * 6.28
+      });
+    }
+  }
+
+  // Ground features (fields / islands / city blocks) per era, tiled too.
+  function seedGround() {
+    grounds = [];
+    var n = Math.max(8, Math.floor(W * H / 90000));
+    for (var i = 0; i < n; i++) {
+      grounds.push({
+        ox: Math.random(), oy: Math.random(),
+        s: 0.6 + Math.random() * 1.2, k: Math.floor(Math.random() * 3)
       });
     }
   }
@@ -72,7 +102,8 @@
     boss = null; killed = 0;
     shields = MAX_SHIELDS; invuln = 0;
     spawnT = 0.8; starT = 4; shake = 0; clearT = 0;
-    player.x = W / 2; player.y = H / 2; player.hd = -Math.PI / 2;
+    player.x = 0; player.y = 0; player.hd = -Math.PI / 2;
+    camX = 0; camY = 0;
     dragId = null;
     introT = 2.0;
     state = "play";
@@ -103,7 +134,7 @@
     return v;
   }
 
-  /* ---------------- input: drag anywhere to steer ---------------- */
+  /* ---------------- input: drag anywhere to rotate ---------------- */
   function onDown(e) {
     if (audio.unlock) audio.unlock();
     if (state === "win" || state === "over") { reset(state === "win"); e.preventDefault(); return; }
@@ -146,7 +177,7 @@
   function confetti(n) {
     for (var j = 0; j < n; j++) {
       parts.push({
-        x: Math.random() * W, y: -20 - Math.random() * H * 0.4,
+        x: player.x + (Math.random() - 0.5) * W, y: player.y - H / 2 - Math.random() * H * 0.4,
         vx: (Math.random() - 0.5) * 60, vy: 120 + Math.random() * 160,
         life: 2.5, t: 0,
         c: ["#ff5252", "#ffd740", "#69f0ae", "#40c4ff", "#e040fb"][j % 5],
@@ -169,36 +200,36 @@
     }
   }
 
-  /* ---------------- spawning ---------------- */
+  /* ---------------- spawning (world coords, around the player) ---------------- */
   function spawnEnemy() {
     var E = era();
-    var side = Math.floor(Math.random() * 4), x, y;
-    if (side === 0) { x = -40; y = Math.random() * H; }
-    else if (side === 1) { x = W + 40; y = Math.random() * H; }
-    else if (side === 2) { x = Math.random() * W; y = -40; }
-    else { x = Math.random() * W; y = H + 40; }
+    var a = Math.random() * Math.PI * 2;
+    var d = Math.max(W, H) * 0.75;
+    var x = player.x + Math.cos(a) * d, y = player.y + Math.sin(a) * d;
     enemies.push({
       x: x, y: y,
       hd: Math.atan2(player.y - y, player.x - x),
-      sp: E.esp * (0.85 + Math.random() * 0.3),
-      wob: Math.random() * 6.28, fireT: 1 + Math.random() * 2,
-      r: level === 4 ? 20 : 24
+      sp: E.esp * 0.7 * (0.85 + Math.random() * 0.3), // gentler than before
+      wob: Math.random() * 6.28, fireT: 1.5 + Math.random() * 2,
+      r: 30
     });
   }
 
   function spawnBoss() {
     var E = era();
     boss = {
-      x: W / 2, y: 130, vx: 90, hp: E.bossHp, maxHp: E.bossHp,
-      fireT: 1.2, wob: 0, r: 54
+      x: player.x, y: player.y - Math.max(W, H) * 0.42,
+      vx: 80, hp: E.bossHp, maxHp: E.bossHp,
+      fireT: 1.6, wob: 0, r: 70
     };
     audio.arp([196, 196, 262], 0.14, "sawtooth", 0.16);
   }
 
   function spawnPickup() {
     pickups.push({
-      x: 60 + Math.random() * (W - 120), y: 120 + Math.random() * (H - 240),
-      t: 0, life: 7
+      x: player.x + (Math.random() - 0.5) * (W - 160),
+      y: player.y + (Math.random() - 0.5) * (H - 260),
+      t: 0, life: 8
     });
   }
 
@@ -227,25 +258,26 @@
     if (introT > 0) introT -= dt;
 
     if (state === "play") {
-      // steering: nose swings toward the finger
+      // steering: the nose swings toward the finger. The plane itself
+      // never leaves the middle of the screen — the world moves instead.
       if (dragId !== null) {
-        var want = Math.atan2(dragY - player.y, dragX - player.x);
-        if (Math.hypot(dragX - player.x, dragY - player.y) > 24) {
+        var want = Math.atan2(dragY - H / 2, dragX - W / 2);
+        if (Math.hypot(dragX - W / 2, dragY - H / 2) > 24) {
           player.hd = turnToward(player.hd, want, TURN_RATE * dt);
         }
       }
-      player.x = wrap(player.x + Math.cos(player.hd) * PLAYER_SPEED * dt, W);
+      player.x += Math.cos(player.hd) * PLAYER_SPEED * dt;
       player.y += Math.sin(player.hd) * PLAYER_SPEED * dt;
-      if (player.y < 80) player.y = 80;
-      if (player.y > H - 20) player.y = H - 20;
+      // the camera is glued to the player: the world streams past
+      camX = player.x; camY = player.y;
 
       // auto-fire
       fireCd -= dt;
       if (fireCd <= 0) {
         fireCd = FIRE_CD;
         bullets.push({
-          x: player.x + Math.cos(player.hd) * 30,
-          y: player.y + Math.sin(player.hd) * 30,
+          x: player.x + Math.cos(player.hd) * 34,
+          y: player.y + Math.sin(player.hd) * 34,
           vx: Math.cos(player.hd) * BULLET_SPEED,
           vy: Math.sin(player.hd) * BULLET_SPEED,
           t: 0
@@ -257,8 +289,8 @@
       var E = era();
       if (!boss && killed < E.quota) {
         spawnT -= dt;
-        if (spawnT <= 0 && enemies.length < 5) {
-          spawnT = 1.1;
+        if (spawnT <= 0 && enemies.length < 4) {
+          spawnT = 1.2;
           spawnEnemy();
         }
       } else if (!boss && killed >= E.quota) {
@@ -269,7 +301,8 @@
       starT -= dt;
       if (starT <= 0) { starT = 6 + Math.random() * 4; spawnPickup(); }
 
-      // enemies
+      // enemies (world coords — distances are camera-independent)
+      var far = Math.max(W, H);
       for (var i = enemies.length - 1; i >= 0; i--) {
         var en = enemies[i];
         var wantHd = Math.atan2(player.y - en.y, player.x - en.x);
@@ -278,21 +311,21 @@
         en.hd = turnToward(en.hd, seek, 2.6 * dt);
         en.x += Math.cos(en.hd) * en.sp * dt;
         en.y += Math.sin(en.hd) * en.sp * dt;
-        if (en.x < -70 || en.x > W + 70 || en.y < -70 || en.y > H + 70) {
+        if (Math.hypot(en.x - player.x, en.y - player.y) > far * 1.2) {
           enemies.splice(i, 1); continue;
         }
-        // shoot back, from 1940 on
+        // shoot back, from 1940 on — slower and rarer than before
         if (E.fire > 0) {
           en.fireT -= dt;
           if (en.fireT <= 0) {
-            en.fireT = E.fire * (0.8 + Math.random() * 0.4);
+            en.fireT = E.fire * 1.7 * (0.8 + Math.random() * 0.4);
             var a = Math.atan2(player.y - en.y, player.x - en.x);
-            ebullets.push({ x: en.x, y: en.y, vx: Math.cos(a) * 230, vy: Math.sin(a) * 230, t: 0 });
+            ebullets.push({ x: en.x, y: en.y, vx: Math.cos(a) * 170, vy: Math.sin(a) * 170, t: 0 });
             audio.tone(300, 0.08, { type: "sawtooth", vol: 0.06, slideTo: 150 });
           }
         }
         var dx = en.x - player.x, dy = en.y - player.y;
-        if (dx * dx + dy * dy < 34 * 34) {
+        if (dx * dx + dy * dy < 28 * 28) {   // forgiving player hitbox
           explode(en.x, en.y, false);
           enemies.splice(i, 1);
           hurt();
@@ -304,24 +337,25 @@
         var bo = boss;
         bo.wob += dt * 2;
         bo.x += bo.vx * dt;
-        if (bo.x < 110 || bo.x > W - 110) bo.vx *= -1;
+        if (bo.x < player.x - 260 || bo.x > player.x + 260) bo.vx *= -1;
+        bo.y += Math.sin(bo.wob) * 20 * dt;
         bo.fireT -= dt;
         if (bo.fireT <= 0) {
-          bo.fireT = 1.6;
+          bo.fireT = 2.2;
           var ba = Math.atan2(player.y - bo.y, player.x - bo.x);
           for (var s = -1; s <= 1; s++) {
             var sa = ba + s * 0.22;
-            ebullets.push({ x: bo.x, y: bo.y + 30, vx: Math.cos(sa) * 250, vy: Math.sin(sa) * 250, t: 0 });
+            ebullets.push({ x: bo.x, y: bo.y + 40, vx: Math.cos(sa) * 200, vy: Math.sin(sa) * 200, t: 0 });
           }
           audio.tone(180, 0.15, { type: "sawtooth", vol: 0.1, slideTo: 90 });
         }
         bossMinionT -= dt;
         if (bossMinionT <= 0 && enemies.length < 3) {
-          bossMinionT = 3;
+          bossMinionT = 3.5;
           spawnEnemy();
         }
         var bdx = bo.x - player.x, bdy = bo.y - player.y;
-        if (bdx * bdx + bdy * bdy < 62 * 62) hurt();
+        if (bdx * bdx + bdy * bdy < 78 * 78) hurt();
       }
 
       // player bullets
@@ -329,14 +363,14 @@
         var bu = bullets[b];
         bu.t += dt;
         bu.x += bu.vx * dt; bu.y += bu.vy * dt;
-        if (bu.t > 1 || bu.x < -20 || bu.x > W + 20 || bu.y < -20 || bu.y > H + 20) {
+        if (bu.t > 1.1 || Math.hypot(bu.x - player.x, bu.y - player.y) > far) {
           bullets.splice(b, 1); continue;
         }
         var hit = false;
         for (var e2 = enemies.length - 1; e2 >= 0; e2--) {
           var en2 = enemies[e2];
           var edx = bu.x - en2.x, edy = bu.y - en2.y;
-          if (edx * edx + edy * edy < 30 * 30) {
+          if (edx * edx + edy * edy < 34 * 34) {   // generous — easy to hit
             explode(en2.x, en2.y, false);
             enemies.splice(e2, 1);
             addScore(100);
@@ -348,7 +382,7 @@
         if (hit) { bullets.splice(b, 1); continue; }
         if (boss) {
           var bdx2 = bu.x - boss.x, bdy2 = bu.y - boss.y;
-          if (bdx2 * bdx2 + bdy2 * bdy2 < 58 * 58) {
+          if (bdx2 * bdx2 + bdy2 * bdy2 < 74 * 74) {
             bullets.splice(b, 1);
             boss.hp--;
             explode(bu.x, bu.y, false);
@@ -369,11 +403,11 @@
         var eb2 = ebullets[eb];
         eb2.t += dt;
         eb2.x += eb2.vx * dt; eb2.y += eb2.vy * dt;
-        if (eb2.t > 3 || eb2.x < -20 || eb2.x > W + 20 || eb2.y < -20 || eb2.y > H + 20) {
+        if (eb2.t > 4 || Math.hypot(eb2.x - player.x, eb2.y - player.y) > far * 1.2) {
           ebullets.splice(eb, 1); continue;
         }
         var pdx = eb2.x - player.x, pdy = eb2.y - player.y;
-        if (pdx * pdx + pdy * pdy < 24 * 24) {
+        if (pdx * pdx + pdy * pdy < 20 * 20) {
           ebullets.splice(eb, 1);
           hurt();
         }
@@ -385,12 +419,17 @@
         pku.t += dt;
         if (pku.t > pku.life) { pickups.splice(pk, 1); continue; }
         var qdx = pku.x - player.x, qdy = pku.y - player.y;
-        if (qdx * qdx + qdy * qdy < 40 * 40) {
+        if (qdx * qdx + qdy * qdy < 44 * 44) {
           pickups.splice(pk, 1);
           addScore(250);
           audio.arp([880, 1320], 0.06, "sine", 0.12);
           confetti(8);
         }
+      }
+
+      // clouds drift a little on their own, on top of the world motion
+      for (var c = 0; c < clouds.length; c++) {
+        clouds[c].ox -= (clouds[c].v * dt) / (W + 480);
       }
 
       invuln -= dt;
@@ -405,19 +444,14 @@
     if (state === "win") { winT += dt; if (shown < score) shown = Math.min(score, shown + 7); }
     if (state === "over") { overT += dt; }
 
-    // particles
-    for (var p = parts.length - 1; p >= 0; p--) {
+    // particles (world coords — they ride the camera like everything else)
+    for (var p = 0; p < parts.length; p++) {
       var pt = parts[p];
       pt.t += dt;
       if (pt.t >= pt.life) { parts.splice(p, 1); continue; }
       pt.x += pt.vx * dt; pt.y += pt.vy * dt;
       if (!pt.confetti) pt.vy += 300 * dt;
       pt.vx *= (1 - dt * 1.5);
-    }
-    // clouds drift
-    for (var c = 0; c < clouds.length; c++) {
-      clouds[c].x -= clouds[c].v * dt;
-      if (clouds[c].x < -140) { clouds[c].x = W + 140; clouds[c].y = Math.random() * H; }
     }
     if (shake > 0) shake = Math.max(0, shake - dt * 30);
   }
@@ -435,17 +469,13 @@
     ctx.translate(x, y);
     ctx.rotate(hd + Math.PI / 2);
     ctx.scale(scale, scale);
-    // fuselage (top-down)
     ctx.fillStyle = body;
     ctx.beginPath();
     ctx.moveTo(0, -22); ctx.lineTo(7, 4); ctx.lineTo(5, 16); ctx.lineTo(-5, 16); ctx.lineTo(-7, 4);
     ctx.closePath(); ctx.fill();
-    // wings
     ctx.fillStyle = dark;
     ctx.fillRect(-20, -4, 40, 8);
-    // tail
     ctx.fillRect(-9, 12, 18, 5);
-    // cockpit
     ctx.fillStyle = "#b3e5fc";
     ctx.beginPath(); ctx.arc(0, -6, 4, 0, 6.29); ctx.fill();
     ctx.restore();
@@ -454,6 +484,7 @@
   function drawUFO(x, y, wob, body, dark) {
     ctx.save();
     ctx.translate(x, y + Math.sin(wob) * 5);
+    ctx.scale(1.7, 1.7);
     ctx.fillStyle = dark;
     ctx.beginPath(); ctx.ellipse(0, 0, 26, 10, 0, 0, 6.29); ctx.fill();
     ctx.fillStyle = body;
@@ -469,8 +500,8 @@
     var E = era();
     ctx.save();
     ctx.translate(x, y + Math.sin(wob) * 8);
+    ctx.scale(1.5, 1.5);
     if (level === 4) {
-      // mothership saucer
       ctx.fillStyle = "#4527a0";
       ctx.beginPath(); ctx.ellipse(0, 0, 58, 20, 0, 0, 6.29); ctx.fill();
       ctx.fillStyle = "#7e57c2";
@@ -478,7 +509,6 @@
       ctx.fillStyle = (Math.floor(performance.now() / 150) % 2) ? "#ff1744" : "#7e57c2";
       ctx.beginPath(); ctx.arc(0, -12, 8, 0, 6.29); ctx.fill();
     } else {
-      // big bomber / carrier plane
       ctx.fillStyle = E.dark;
       ctx.fillRect(-58, -10, 116, 20);
       ctx.fillRect(-14, -34, 28, 68);
@@ -492,55 +522,88 @@
     ctx.restore();
     // boss health bar
     ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(x - 50, y - 52, 100, 10);
+    ctx.fillRect(x - 60, y - 78, 120, 12);
     ctx.fillStyle = "#ff5252";
-    ctx.fillRect(x - 48, y - 50, 96 * Math.max(0, boss.hp / boss.maxHp), 6);
+    ctx.fillRect(x - 58, y - 76, 116 * Math.max(0, boss.hp / boss.maxHp), 8);
+  }
+
+  function drawGroundTile() {
+    // era-flavored ground patches that stream past below the clouds
+    for (var i = 0; i < grounds.length; i++) {
+      var g2 = grounds[i];
+      var TW = W + 560, TH = H + 560;
+      var X = wrap(g2.ox * TW - camX * 0.85, TW) - 280;
+      var Y = wrap(g2.oy * TH - camY * 0.85, TH) - 280;
+      var r = 55 * g2.s;
+      ctx.globalAlpha = 0.5;
+      if (level === 1) {
+        ctx.fillStyle = g2.k === 0 ? "#b98d55" : g2.k === 1 ? "#a87f4b" : "#c49a5f";
+        ctx.beginPath(); ctx.ellipse(X, Y, r * 1.6, r, 0.3, 0, 6.29); ctx.fill();
+      } else if (level === 2) {
+        ctx.fillStyle = g2.k === 0 ? "#6b7f6e" : g2.k === 1 ? "#5d6f66" : "#77876f";
+        ctx.fillRect(X - r, Y - r * 0.6, r * 2, r * 1.2);
+      } else if (level === 3) {
+        ctx.fillStyle = g2.k === 0 ? "#3f7a44" : g2.k === 1 ? "#4c8a3f" : "#35702f";
+        ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.29); ctx.fill();
+      }
+      // 1983: no ground — deep space
+    }
+    ctx.globalAlpha = 1;
   }
 
   function draw() {
-    ctx.save();
-    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
-
-    // sky
+    // sky (screen space)
     var sc = skyColors();
     var g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, sc[0]); g.addColorStop(0.6, sc[1]); g.addColorStop(1, sc[2]);
-    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-    // space stars for 1983
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+
     if (level === 4) {
-      ctx.fillStyle = "#ffffff";
+      // parallax starfield, two depths
       for (var st = 0; st < stars.length; st++) {
         var s2 = stars[st];
-        ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(performance.now() / 700 + s2.tw));
-        ctx.fillRect(s2.x * W, s2.y * H, 2.5, 2.5);
+        var TW = W + 200, TH = H + 200;
+        var X = wrap(s2.ox * TW - camX * s2.par, TW) - 100;
+        var Y = wrap(s2.oy * TH - camY * s2.par, TH) - 100;
+        ctx.globalAlpha = (0.35 + 0.65 * Math.abs(Math.sin(performance.now() / 700 + s2.tw))) * (s2.par + 0.4);
+        ctx.fillStyle = "#ffffff";
+        var sz = s2.par > 0.5 ? 3.5 : 2.5;
+        ctx.fillRect(X, Y, sz, sz);
       }
       ctx.globalAlpha = 1;
     } else {
-      // clouds
-      ctx.fillStyle = level === 2 ? "rgba(230,235,240,0.7)" : "rgba(255,255,255,0.85)";
+      // ground patches stream by underneath
+      drawGroundTile();
+      // big puffy clouds, tiled around the camera
+      ctx.fillStyle = level === 2 ? "rgba(230,235,240,0.75)" : "rgba(255,255,255,0.9)";
+      var TW2 = W + 480, TH2 = H + 480;
       for (var i = 0; i < clouds.length; i++) {
-        var cl = clouds[i], s = cl.s;
+        var cl = clouds[i], s = cl.s * 1.6; // 2x-ish puffs
+        var cx2 = wrap(cl.ox * TW2 - camX, TW2) - 240;
+        var cy2 = wrap(cl.oy * TH2 - camY, TH2) - 240;
         ctx.beginPath();
-        ctx.arc(cl.x, cl.y, 26 * s, 0, 6.29);
-        ctx.arc(cl.x + 24 * s, cl.y + 6 * s, 20 * s, 0, 6.29);
-        ctx.arc(cl.x - 24 * s, cl.y + 8 * s, 18 * s, 0, 6.29);
+        ctx.arc(cx2, cy2, 30 * s, 0, 6.29);
+        ctx.arc(cx2 + 28 * s, cy2 + 7 * s, 23 * s, 0, 6.29);
+        ctx.arc(cx2 - 28 * s, cy2 + 9 * s, 21 * s, 0, 6.29);
         ctx.fill();
       }
     }
 
-    // pickups: twinkling stars
+    // pickups: big twinkling stars
     for (var pk = 0; pk < pickups.length; pk++) {
       var pku = pickups[pk];
       var tw = 0.6 + 0.4 * Math.sin(performance.now() / 200 + pku.x);
       ctx.save();
-      ctx.translate(pku.x, pku.y);
+      ctx.translate(sx(pku.x), sy(pku.y));
       ctx.rotate(performance.now() / 1200);
       ctx.globalAlpha = tw;
       ctx.fillStyle = "#ffd740";
       ctx.beginPath();
       for (var sp = 0; sp < 10; sp++) {
-        var rr = sp % 2 === 0 ? 14 : 6;
+        var rr = sp % 2 === 0 ? 22 : 9;
         var aa = sp * Math.PI / 5;
         ctx.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
       }
@@ -549,10 +612,13 @@
     }
     ctx.globalAlpha = 1;
 
-    // enemy bullets
+    // enemy bullets — big and slow, easy to see
     ctx.fillStyle = "#ff5252";
     for (var eb = 0; eb < ebullets.length; eb++) {
-      ctx.beginPath(); ctx.arc(ebullets[eb].x, ebullets[eb].y, 6, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx(ebullets[eb].x), sy(ebullets[eb].y), 9, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#ff8a80";
+      ctx.beginPath(); ctx.arc(sx(ebullets[eb].x), sy(ebullets[eb].y), 4, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#ff5252";
     }
 
     // player bullets
@@ -560,32 +626,32 @@
     for (var b = 0; b < bullets.length; b++) {
       var bu = bullets[b];
       ctx.save();
-      ctx.translate(bu.x, bu.y);
+      ctx.translate(sx(bu.x), sy(bu.y));
       ctx.rotate(Math.atan2(bu.vy, bu.vx));
-      ctx.fillRect(-12, -2.5, 24, 5);
+      ctx.fillRect(-15, -3.5, 30, 7);
       ctx.restore();
     }
 
-    // enemies
+    // enemies — chunky 2x sprites
     var E = era();
     for (var e = 0; e < enemies.length; e++) {
       var en = enemies[e];
-      if (level === 4) drawUFO(en.x, en.y, en.wob, E.body, E.dark);
-      else drawPlane(en.x, en.y, en.hd, E.body, E.dark, 0.9);
+      if (level === 4) drawUFO(sx(en.x), sy(en.y), en.wob, E.body, E.dark);
+      else drawPlane(sx(en.x), sy(en.y), en.hd, E.body, E.dark, 1.8);
     }
 
     // boss
-    if (boss) drawBoss(boss.x, boss.y, boss.wob);
+    if (boss) drawBoss(sx(boss.x), sy(boss.y), boss.wob);
 
-    // player (blink while invulnerable)
+    // THE player — dead center, always
     if (!(invuln > 0 && Math.floor(performance.now() / 120) % 2 === 0)) {
-      drawPlane(player.x, player.y, player.hd, "#d32f2f", "#7f0000", 1);
+      drawPlane(W / 2, H / 2, player.hd, "#d32f2f", "#7f0000", SPR);
       // little steering ribbon toward the finger
       if (dragId !== null && state === "play") {
         ctx.strokeStyle = "rgba(255,255,255,0.35)";
         ctx.lineWidth = 3;
         ctx.setLineDash([8, 10]);
-        ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(dragX, dragY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.lineTo(dragX, dragY); ctx.stroke();
         ctx.setLineDash([]);
       }
     }
@@ -596,25 +662,24 @@
       ctx.globalAlpha = 1 - pt.t / pt.life;
       ctx.fillStyle = pt.c;
       if (pt.confetti) {
-        ctx.fillRect(pt.x - pt.r / 2, pt.y - pt.r / 4, pt.r, pt.r / 2);
+        ctx.fillRect(sx(pt.x) - pt.r / 2, sy(pt.y) - pt.r / 4, pt.r, pt.r / 2);
       } else {
-        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * (1 - pt.t / pt.life * 0.5), 0, 6.29); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx(pt.x), sy(pt.y), pt.r * (1 - pt.t / pt.life * 0.5), 0, 6.29); ctx.fill();
       }
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // HUD
+    // HUD (screen space)
     for (var s = 0; s < MAX_SHIELDS; s++) {
       ctx.globalAlpha = s < shields ? 1 : 0.22;
       drawMiniPlane(30 + s * 44, 34, s < shields ? "#d32f2f" : "#90a4ae");
     }
     ctx.globalAlpha = 1;
-    // level pips
     for (var lp = 0; lp < ERAS.length; lp++) {
       ctx.fillStyle = lp < level ? "#ffd740" : "rgba(255,255,255,0.25)";
       ctx.beginPath(); ctx.arc(30 + lp * 24, 62, 7, 0, 6.29); ctx.fill();
     }
-    // quota progress: dots top-right
     var E2 = era();
     var left = boss ? 0 : Math.max(0, E2.quota - killed);
     var total = E2.quota;
@@ -630,17 +695,14 @@
       ctx.textAlign = "right";
       ctx.fillText("BOSS", W - 24, 40);
     }
-    // score
     drawPixelNumber(ctx, shown, W / 2, 30, 5, "#ffffff", true);
 
-    // era intro: the year, big — no reading needed
     if (introT > 0 && state === "play") {
       ctx.globalAlpha = Math.min(1, introT);
       drawPixelNumber(ctx, era().year, W / 2, H * 0.38, 8, "#ffd740", true);
       ctx.globalAlpha = 1;
     }
 
-    // steering hint at the very start
     if (state === "play" && score === 0 && killed === 0 && !boss) {
       ctx.globalAlpha = 0.4 + 0.25 * Math.sin(performance.now() / 300);
       ctx.fillStyle = "#ffffff";
@@ -650,7 +712,6 @@
       ctx.globalAlpha = 1;
     }
 
-    // overlays
     if (state === "clear") {
       ctx.fillStyle = "rgba(20,40,70,0.45)";
       ctx.fillRect(0, 0, W, H);
@@ -676,8 +737,6 @@
         ctx.globalAlpha = 1;
       }
     }
-
-    ctx.restore();
   }
 
   function drawMiniPlane(x, y, color) {
@@ -699,11 +758,6 @@
     requestAnimationFrame(frame);
   }
 
-  // starfield for the 1983 space era
-  for (var si = 0; si < 70; si++) {
-    stars.push({ x: Math.random(), y: Math.random(), tw: Math.random() * 6.28 });
-  }
-
   resize();
   reset(true);
   requestAnimationFrame(frame);
@@ -720,7 +774,17 @@
         if (o.W != null) W = o.W;
         if (o.H != null) H = o.H;
         if (o.level != null) level = o.level;
-      }
+      },
+      _frame: function (dt) { update(dt); },
+      _drag: function (x, y) { dragId = 1; dragX = x; dragY = y; },
+      _undrag: function () { dragId = null; },
+      _player: function () { return { x: player.x, y: player.y, hd: player.hd }; },
+      _cam: function () { return { x: camX, y: camY }; },
+      _screen: function (wx, wy) { return { x: sx(wx), y: sy(wy) }; },
+      _enemies: function () { return enemies; },
+      _spawnEnemy: spawnEnemy,
+      _state: function (s) { if (s !== undefined) state = s; return state; },
+      _setPlayer: function (x, y, hd) { player.x = x; player.y = y; if (hd != null) player.hd = hd; camX = x; camY = y; }
     };
   }
 })();
