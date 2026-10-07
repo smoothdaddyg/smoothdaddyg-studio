@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "glamhair", title: "Glam Hair", desc: "Brush, curl, dye and style her hair — then lipstick, blush and bows!",
+    hue: 315, sprite: "ball", url: "games/glamhair/" },
   { id: "dancejudge", title: "Dance Judge", desc: "Watch three silly couples dance, then score them 1-10 like a real judge!",
     hue: 315, sprite: "ball", url: "games/dancejudge/" },
   {
