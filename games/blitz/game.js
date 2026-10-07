@@ -237,7 +237,8 @@
   function tryFire() {
     if (fireCd > 0 || state !== "play") return;
     fireCd = FIRE_CD;
-    bullets.push({ x: planeX + 34, y: plane.y - 2 });
+    // bullets inherit the plane's motion: climb and they angle up with you
+    bullets.push({ x: planeX + 34, y: plane.y - 2, vx: GUN_VX, vy: plane.vy });
     audio.noise(0.09, { filter: "highpass", freq: 2400, vol: 0.16 });
     audio.tone(880, 0.06, { type: "square", vol: 0.07, slideTo: 440 });
   }
@@ -245,7 +246,8 @@
   function tryBomb() {
     if (bombCd > 0 || state !== "play") return;
     bombCd = BOMB_CD;
-    bombs.push({ x: planeX + 6, y: plane.y + 14, vy: 40 });
+    // the bomb leaves with the plane's vertical speed, then weight wins
+    bombs.push({ x: planeX + 6, y: plane.y + 14, vy: plane.vy + 50 });
     audio.tone(1200, 0.7, { type: "sine", vol: 0.08, slideTo: 280 });
   }
 
@@ -353,8 +355,9 @@
       // bullets
       for (var i = bullets.length - 1; i >= 0; i--) {
         var b = bullets[i];
-        b.x += GUN_VX * dt;
-        if (b.x > W + 20) { bullets.splice(i, 1); continue; }
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        if (b.x > W + 20 || b.y < -20 || b.y > H + 20) { bullets.splice(i, 1); continue; }
         // vs enemy planes
         var hit = false;
         for (var e = enemies.length - 1; e >= 0; e--) {
@@ -736,19 +739,27 @@
       if (sx > -80 && sx < W + 80) drawBase(bases[b], sx);
     }
 
-    // bombs
+    // bombs (nose over as they fall)
     ctx.fillStyle = "#37474f";
     for (var bo = 0; bo < bombs.length; bo++) {
       var bm = bombs[bo];
-      ctx.beginPath(); ctx.arc(bm.x, bm.y, 7, 0, 6.29); ctx.fill();
-      ctx.fillRect(bm.x - 2, bm.y - 12, 4, 7);
+      ctx.save();
+      ctx.translate(bm.x, bm.y);
+      ctx.rotate(Math.max(-0.6, Math.min(1.2, bm.vy / 600)));
+      ctx.beginPath(); ctx.arc(0, 0, 7, 0, 6.29); ctx.fill();
+      ctx.fillRect(-2, -12, 4, 7);
+      ctx.restore();
     }
 
-    // bullets
+    // bullets (fly along their velocity)
     ctx.fillStyle = "#ffea00";
     for (var bl = 0; bl < bullets.length; bl++) {
       var bu = bullets[bl];
-      ctx.fillRect(bu.x - 10, bu.y - 2, 20, 4);
+      ctx.save();
+      ctx.translate(bu.x, bu.y);
+      ctx.rotate(Math.atan2(bu.vy, bu.vx));
+      ctx.fillRect(-10, -2, 20, 4);
+      ctx.restore();
     }
 
     // enemies — new paint job every level, meaner each time
@@ -938,7 +949,16 @@
         if (o.W != null) W = o.W;
         if (o.level != null) level = o.level;
       },
-      _zones: zones
+      _zones: zones,
+      _state: function (s) { if (s !== undefined) state = s; return state; },
+      _setPlane: function (o) {
+        if (o.vy != null) plane.vy = o.vy;
+        if (o.y != null) plane.y = o.y;
+      },
+      _tryFire: tryFire, _tryBomb: tryBomb,
+      _bullets: function () { return bullets; },
+      _bombs: function () { return bombs; },
+      _frame: function (dt) { update(dt); }
     };
   }
 })();
