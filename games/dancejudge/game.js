@@ -979,13 +979,13 @@
               life: rnd(1.6, 2.8), t: 0, c: "hsl(" + ri(0, 360) + ",95%,62%)", r: rnd(3, 6), shape: "conf", rot: rnd(0, 6), vr: rnd(-6, 6) });
   }
   function firework(x, y) {
+    // visuals only — no boom (too much for little ears)
     var hue = ri(0, 360);
     for (var i = 0; i < 30; i++) {
       var a = rnd(0, 6.283), s = rnd(40, 170);
       spawn({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
               life: rnd(0.7, 1.3), t: 0, c: "hsl(" + hue + ",95%,62%)", r: rnd(2, 4), shape: "dot" });
     }
-    audio.noise(0.4, { vol: 0.2, filter: "lowpass", freq: 1400 });
   }
   function balloon(x) {
     spawn({ x: x, y: H + 30, vx: rnd(-14, 14), vy: rnd(-120, -80), life: rnd(4, 6), t: 0,
@@ -1029,6 +1029,30 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.29); ctx.fill();
       }
       ctx.globalAlpha = 1;
+    }
+  }
+
+  /* Per-act confetti themes: each performance ends with its own flavor. */
+  var CONF_THEMES = ["stars", "hearts", "bubbles", "notes", "rainbow"];
+  function celebrationBurst(theme, x, y, n) {
+    n = n || 40;
+    for (var i = 0; i < n; i++) {
+      var px = x + rnd(-70, 70), py = y + rnd(-50, 40);
+      if (theme === "stars")
+        spawn({ x: px, y: py, vx: rnd(-90, 90), vy: rnd(-170, -30), life: rnd(1, 2), t: 0,
+                c: pick(["#fff3b0", "#ffd23b", "#ffffff"]), r: rnd(3, 6), shape: "star" });
+      else if (theme === "hearts")
+        spawn({ x: px, y: py, vx: rnd(-70, 70), vy: rnd(-150, -30), life: rnd(1, 2), t: 0,
+                c: pick(["#ff3b6b", "#ff8ab3", "#ff5c8a"]), r: rnd(4, 7), shape: "heart" });
+      else if (theme === "bubbles")
+        spawn({ x: px, y: py, vx: rnd(-60, 60), vy: rnd(-130, -20), life: rnd(1, 2), t: 0,
+                c: pick(["#35c4ff", "#7ad9ff", "#d6f2ff"]), r: rnd(3, 7), shape: "dot" });
+      else if (theme === "notes")
+        spawn({ x: px, y: py, vx: rnd(-50, 50), vy: rnd(-130, -30), life: rnd(1, 1.8), t: 0,
+                c: pick(["#ff8ab3", "#35c4ff", "#ffd23b"]), r: rnd(5, 8), shape: "note" });
+      else
+        spawn({ x: px, y: py, vx: rnd(-90, 90), vy: rnd(60, 180), life: rnd(1.4, 2.4), t: 0,
+                c: "hsl(" + ri(0, 360) + ",95%,62%)", r: rnd(3, 6), shape: "conf", rot: rnd(0, 6), vr: rnd(-6, 6) });
     }
   }
 
@@ -1099,6 +1123,9 @@
   var replayBtn = null, titleBtn = null;
   var fanfareT = 0, fwT = 0, confT = 0, starT = 0;
   var winners = [];
+  // awards-show sequence state
+  var reveal = [false, false, false], revealT = 0, revealPop = [0, 0, 0];
+  var spotSweep = false, rollT = 0, rollAcc = 0;
 
   function floorY() { return H * 0.70; }
   function dancerScale() { return clamp(Math.min(W, H) / 700, 0.7, 1.4); }
@@ -1107,6 +1134,7 @@
     var pers = shuffle(Object.keys(PERSONALITIES).slice()).slice(0, 3);
     var themes = shuffle(THEMES.slice()).slice(0, 3);
     var stages = shuffle(STAGE_IDS.slice()).slice(0, 3);
+    var cthemes = shuffle(CONF_THEMES.slice()).slice(0, 3);
     var acts = [];
     for (var i = 0; i < 3; i++) {
       var p = PERSONALITIES[pers[i]];
@@ -1115,7 +1143,8 @@
         couple: makeCouple(), theme: themes[i],
         personality: pers[i], style: style,
         stage: stages[i], music: Music(style),
-        routine: null, score: 0,
+        routine: null, score: 0, cheer: 0.5,
+        confetti: cthemes[i],
       });
       // theme the couple by its own theme (not the shared pick)
       acts[i].couple = (function (th) { return { theme: th, a: makeDancer(th, 0), b: makeDancer(th, 1) }; })(themes[i]);
@@ -1193,24 +1222,28 @@
   var BTN_COLORS = ["#ff3b30", "#ff6a3b", "#ff8a3b", "#ffb43b", "#ffd23b",
                     "#3ddc84", "#35c4ff", "#3b8aff", "#7a5cff", "#ff3df0"];
 
+  /* Score buttons span the entire bottom edge — huge targets.
+     Faces go from flat (1) to huge grin (10): no reading needed. */
   function layoutButtons() {
     buttons = [];
-    var top = H - 128, n = 10, gap = 8;
-    var bw, rows;
+    var n = 10, gap = 6, margin = 6;
+    var top = H - 128, bh, bw, rows;
     if (W >= 880) {
-      bw = Math.min(92, (W - 48) / n - gap); rows = 1;
+      rows = 1; bh = 104;
+      bw = (W - margin * 2 - gap * (n - 1)) / n;
     } else {
-      bw = Math.min(92, (W - 48) / 5 - gap); rows = 2;
+      rows = 2; bh = 56;
+      bw = (W - margin * 2 - gap * 4) / 5;
     }
-    var bh = rows === 1 ? 104 : 56;
     for (var i = 0; i < n; i++) {
       var r = rows === 1 ? 0 : (i / 5) | 0;
       var c = rows === 1 ? i : i % 5;
-      var perRow = rows === 1 ? 10 : 5;
-      var rowW = perRow * (bw + gap) - gap;
-      var x = (W - rowW) / 2 + c * (bw + gap);
-      var y = top + r * (bh + gap) + (rows === 1 ? 0 : 6);
-      buttons.push({ n: i + 1, x: x, y: y, w: bw, h: bh, c: BTN_COLORS[i], pop: 0 });
+      buttons.push({
+        n: i + 1,
+        x: margin + c * (bw + gap),
+        y: top + r * (bh + gap) + (rows === 1 ? 0 : 6),
+        w: bw, h: bh, c: BTN_COLORS[i], pop: 0,
+      });
     }
   }
 
@@ -1221,32 +1254,76 @@
       var s = 1 + b.pop * 0.45;
       var w = b.w * s, h = b.h * s;
       var x = b.x + b.w / 2 - w / 2, y = b.y + b.h / 2 - h / 2;
+      var cx = b.x + b.w / 2;
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       roundRect(x + 3, y + 6, w, h, 16); ctx.fill();
       ctx.fillStyle = b.c;
       roundRect(x, y, w, h, 16); ctx.fill();
       ctx.fillStyle = "rgba(255,255,255,0.35)";
       roundRect(x + 4, y + 4, w - 8, h * 0.42, 12); ctx.fill();
+      // number
       ctx.fillStyle = "#fff";
-      ctx.font = "bold " + Math.round(h * 0.52) + "px 'Press Start 2P', monospace";
+      ctx.font = "bold " + Math.round(h * 0.40) + "px 'Press Start 2P', monospace";
       ctx.shadowColor = "rgba(0,0,0,0.4)"; ctx.shadowBlur = 4;
-      ctx.fillText(String(b.n), b.x + b.w / 2, y + h / 2 + 2);
+      ctx.fillText(String(b.n), cx, y + h * 0.30);
       ctx.shadowBlur = 0;
+      // face: flat line at 1, beaming grin at 10
+      var sm = (b.n - 1) / 9;
+      var fr = h * 0.155, fx = cx, fy = y + h * 0.70;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(fx, fy, fr, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#1a1a1a";
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = Math.max(2, fr * 0.13); ctx.lineCap = "round";
+      if (b.n >= 8) {
+        [-1, 1].forEach(function (sg) {
+          ctx.beginPath();
+          ctx.arc(fx + sg * fr * 0.36, fy - fr * 0.08, fr * 0.2, Math.PI * 1.15, Math.PI * 1.85);
+          ctx.stroke();
+        });
+      } else {
+        ctx.beginPath(); ctx.arc(fx - fr * 0.34, fy - fr * 0.08, fr * 0.11, 0, 6.29); ctx.fill();
+        ctx.beginPath(); ctx.arc(fx + fr * 0.34, fy - fr * 0.08, fr * 0.11, 0, 6.29); ctx.fill();
+      }
+      if (b.n === 10) {
+        ctx.fillStyle = "#7a1f1f";
+        ctx.beginPath(); ctx.arc(fx, fy - fr * 0.05, fr * 0.52, 0.28 * Math.PI, 0.72 * Math.PI); ctx.fill();
+      }
+      ctx.beginPath();
+      if (sm < 0.12) {
+        ctx.moveTo(fx - fr * 0.42, fy + fr * 0.32);
+        ctx.lineTo(fx + fr * 0.42, fy + fr * 0.32);
+      } else {
+        ctx.arc(fx, fy - fr * 0.05, fr * (0.28 + sm * 0.42), 0.28 * Math.PI, 0.72 * Math.PI);
+      }
+      ctx.stroke();
     }
     ctx.textBaseline = "alphabetic";
   }
 
+  /* Scoring is scaled: a small score gets a gentle nod, a big score
+     gets the whole crowd. Never punish a low score. */
   function judgeScore(n, bx, by) {
     var act = currentAct();
     act.score = n;
-    audio.arp([440 + n * 60, 554 + n * 60, 659 + n * 60], 0.07, "square", 0.12);
-    sparkle(bx, by, "#fff3b0"); sparkle(bx, by, BTN_COLORS[n - 1]);
-    confettiBurst(20, H * 0.4);
+    act.cheer = n >= 8 ? 1 : n >= 4 ? 0.55 : 0.25;
+    var big = n >= 8, mid = n >= 4 && n < 8;
+    if (big) {
+      audio.arp([523, 659, 784, 1047], 0.08, "square", 0.13);
+      audio.noise(0.5, { vol: 0.1, filter: "highpass", freq: 1200 });
+      celebrationBurst("rainbow", bx, by - 60, 30);
+    } else if (mid) {
+      audio.arp([440, 554, 659], 0.09, "square", 0.1);
+    } else {
+      audio.tone(330, 0.3, { type: "triangle", vol: 0.1 });
+      audio.tone(262, 0.35, { type: "triangle", vol: 0.08, when: 0.12 });
+    }
+    sparkle(bx, by, "#fff3b0");
+    if (big) sparkle(bx, by, BTN_COLORS[n - 1]);
     [act.couple.a, act.couple.b].forEach(function (d) {
-      d.expr = n >= 7 ? "cheer" : n >= 4 ? "laugh" : "happy";
+      d.expr = big ? "cheer" : mid ? "laugh" : "happy";
     });
-    crowd.forEach(function (c) { c.excite = 1; });
-    audio.noise(0.5, { vol: 0.12, filter: "highpass", freq: 1200 }); // crowd cheer-ish
+    crowd.forEach(function (c) { c.excite = big ? 1 : mid ? 0.5 : 0.2; });
     stateT = 0; state = "scored";
   }
 
@@ -1305,7 +1382,13 @@
       }
     } else if (state === "pose") {
       convergeT = Math.max(0, convergeT - dt);
-      if (stateT > 1.6) { state = "judge"; stateT = 0; layoutButtons(); }
+      if (stateT > 1.6) {
+        state = "judge"; stateT = 0; layoutButtons();
+        // each performance ends with its own confetti flavor
+        var pa = currentAct();
+        celebrationBurst(pa.confetti, W / 2, floorY() - 150, 45);
+        audio.arp([659, 784], 0.09, "square", 0.1);
+      }
     } else if (state === "judge") {
       var ac2 = currentAct();
       var beat2 = (now % 1);
@@ -1313,17 +1396,18 @@
       ac2.couple.a.expr = "happy"; ac2.couple.b.expr = "happy";
     } else if (state === "scored") {
       var ac3 = currentAct();
-      ac3.couple.a.jump = Math.abs(Math.sin(stateT * 10)) * 30;
-      ac3.couple.b.jump = Math.abs(Math.sin(stateT * 10 + 1)) * 30;
+      var ch = ac3.cheer == null ? 0.5 : ac3.cheer;
+      ac3.couple.a.jump = Math.abs(Math.sin(stateT * 10)) * (6 + 44 * ch);
+      ac3.couple.b.jump = Math.abs(Math.sin(stateT * 10 + 1)) * (6 + 44 * ch);
       if (stateT > 1.7) {
         show.idx++;
         if (show.idx >= 3) {
-          // results: everyone on stage
+          // awards show: everyone on stage, scores revealed one by one
           show.acts.forEach(function (a3, i) {
             placeCouple(a3.couple, W * (0.2 + i * 0.3), floorY());
           });
           state = "results"; stateT = 0;
-          audio.arp([523, 659, 784, 1047, 784, 1047], 0.1, "square", 0.12);
+          reveal = [false, false, false]; revealPop = [0, 0, 0]; revealT = 0;
         } else startAct();
       }
     } else if (state === "results") {
@@ -1331,13 +1415,45 @@
         var beat3 = (now % 1) + i * 0.3;
         idleGroove(a4.couple.a, beat3); idleGroove(a4.couple.b, beat3 + 0.5);
       });
-      if (stateT > 4.2) {
-        // winners!
+      for (var pi = 0; pi < 3; pi++)
+        if (revealPop[pi] > 0) revealPop[pi] = Math.max(0, revealPop[pi] - dt * 2);
+      // scores pop in one per second, left to right
+      revealT += dt;
+      for (var ri2 = 0; ri2 < 3; ri2++) {
+        if (!reveal[ri2] && revealT > ri2 + 1) {
+          reveal[ri2] = true; revealPop[ri2] = 1;
+          var cxr = W * (0.2 + ri2 * 0.3);
+          sparkle(cxr, H * 0.40, "#fff3b0");
+          audio.tone(440 + ri2 * 160, 0.35, { type: "square", vol: 0.12 });
+          audio.tone(660 + ri2 * 160, 0.4, { type: "square", vol: 0.08, when: 0.1 });
+        }
+      }
+      if (revealT > 4.1) {
+        state = "suspense"; stateT = 0;
+        spotSweep = true; rollT = 0; rollAcc = 0;
+      }
+    } else if (state === "suspense") {
+      // dramatic pause: spotlights sweep wildly, drum roll builds
+      show.acts.forEach(function (a4, i) {
+        var beat3 = (now % 1) + i * 0.3;
+        idleGroove(a4.couple.a, beat3); idleGroove(a4.couple.b, beat3 + 0.5);
+        a4.couple.a.expr = "wow"; a4.couple.b.expr = "wow";
+      });
+      rollT += dt; rollAcc += dt;
+      var rk = clamp(rollT / 2.8, 0, 1);
+      if (rollAcc >= lerp(0.32, 0.07, rk)) {
+        rollAcc = 0;
+        audio.tone(70 + rk * 40, 0.1, { type: "sine", vol: 0.28, slideTo: 50 });
+        audio.noise(0.05, { vol: 0.07, filter: "lowpass", freq: 800 });
+      }
+      if (rollT > 2.8) {
+        spotSweep = false;
         var max = Math.max(show.acts[0].score, show.acts[1].score, show.acts[2].score);
         winners = show.acts.filter(function (a5) { return a5.score === max; });
-        state = "winner"; stateT = 0; fanfareT = 0; fwT = 0;
+        state = "winner"; stateT = 0; fanfareT = 0; fwT = 0; confT = 0; starT = 0;
         convergeT = 99;
         crowd.forEach(function (c) { c.excite = 1; });
+        audio.arp([523, 659, 784, 1047, 1319, 1568, 2093], 0.07, "square", 0.14);
       }
     } else if (state === "winner") {
       // winners groove to the middle, everyone celebrates
@@ -1384,7 +1500,9 @@
       }
       confT -= dt;
       if (confT <= 0) {
-        confettiBurst(45);
+        // lots of confetti for the winner, in their act's flavor
+        confettiBurst(35);
+        if (winners.length) celebrationBurst(winners[0].confetti, W / 2, H * 0.25, 25);
         confT = 0.45;
       }
       starT -= dt;
@@ -1446,6 +1564,7 @@
     for (var i = 0; i < 3; i++) {
       var tx;
       if (convergeT > 0) tx = W / 2;
+      else if (spotSweep) tx = W / 2 + Math.sin(t * 9 + i * 2.4) * W * 0.45;
       else if (spotTarget !== null && i === 1) tx = spotTarget;
       else tx = tops[i] + Math.sin(t * 0.9 + i * 2.1) * W * 0.12;
       ctx.fillStyle = cols[i];
@@ -1546,13 +1665,14 @@
     if (dimT > 0) { ctx.fillStyle = "rgba(0,0,10," + (0.45 * dimT) + ")"; ctx.fillRect(0, 0, W, H); }
     if (flashT > 0) { ctx.fillStyle = "rgba(255,255,255," + (0.55 * flashT / 0.35) + ")"; ctx.fillRect(0, 0, W, H); }
 
-    // results scores
-    if (state === "results" || state === "winner" || state === "replay") {
+    // awards scores: revealed one by one, then winner highlighted
+    if (state === "results" || state === "suspense" || state === "winner" || state === "replay") {
       ctx.textAlign = "center";
       show.acts.forEach(function (a2, i) {
+        if ((state === "results" || state === "suspense") && !reveal[i]) return;
         var cx = W * (0.2 + i * 0.3);
-        var isW = state !== "results" && winners.indexOf(a2) >= 0;
-        var sc2 = isW ? 1.35 + 0.1 * Math.sin(t * 6) : 1;
+        var isW = (state === "winner" || state === "replay") && winners.indexOf(a2) >= 0;
+        var sc2 = (isW ? 1.35 + 0.1 * Math.sin(t * 6) : 1) * (1 + (revealPop[i] || 0) * 0.5);
         ctx.save(); ctx.translate(cx, H * 0.40); ctx.scale(sc2, sc2);
         if (isW) {
           ctx.fillStyle = "#ffd23b";
