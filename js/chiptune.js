@@ -16,6 +16,16 @@ function makeAudio() {
   function ac() {
     if (!unlocked) return null;
     if (!ctx) {
+      // iOS/iPadOS route Web Audio through the "Ambient" session, which
+      // Silent Mode mutes outright — so games are silent through the
+      // speaker whenever the silent switch is on (headphones exempt).
+      // Claiming the "playback" session (Safari 16.4+) opts game audio
+      // out of the silent switch. Guarded: no-op everywhere else.
+      try {
+        if (typeof navigator !== "undefined" && "audioSession" in navigator && navigator.audioSession) {
+          navigator.audioSession.type = "playback";
+        }
+      } catch (e) { /* ignore — ambient rules still apply */ }
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC();
     }
