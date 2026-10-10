@@ -29,23 +29,43 @@
   var audio = makeAudio();
 
   /* ---------------- mazes ---------------- */
-  var COLS = 13, ROWS = 11;
+  var COLS = 13, ROWS = 28;
   // # wall, . dot, o power pellet, P player start, G monster house,
   // - house door, space walkable (no dot)
-  // Small on purpose: very few paths, thick chunky walls, fills the screen.
+  // Tall maze that fills a phone screen. EVERY pathway is 1 tile wide
+  // with walls on both sides — no big open rooms anywhere.
   var MAZE_GRID = [
     "#############",
-    "#.....#.....#",
-    "#.###.#.###.#",
-    "#o#.......#o#",
-    "#.#.#####.#.#",
-    "#...#GGG#...#",
-    "#...#---#...#",
-    "#.##.....##.#",
-    "#.....P.....#",
     "#o.........o#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#...........#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.###GGG###.#",
+    "#....---....#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#...........#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#.####.####.#",
+    "#o....P....o#",
+    "#.####.####.#",
     "#############",
   ];
+  // monster house center (the middle G tile); the door is the row below
+  var HOUSE = { x: 6, y: 12 };
   var MAZES = [
     { pal: ["#ff5c7a", "#ffb340", "#35c4ff", "#7dff6a"], grid: MAZE_GRID },
     { pal: ["#b45cff", "#5cff8a", "#ffd23b", "#3b8aff"], grid: MAZE_GRID },
@@ -131,10 +151,10 @@
     player = { x: ps.x, y: ps.y, dir: { x: 0, y: 0 }, want: { x: -1, y: 0 }, mouth: 0, speed: P.playerSpeed };
     ghosts = [];
     var pal = MAZES[lv - 1].pal;
-    var homes = [5, 6, 7, 6];
+    var homes = [HOUSE.x - 1, HOUSE.x, HOUSE.x + 1, HOUSE.x];
     for (var i = 0; i < 4; i++) {
       ghosts.push({
-        x: homes[i], y: 5, dir: { x: -1, y: 0 }, mode: "house",
+        x: homes[i], y: HOUSE.y, dir: { x: -1, y: 0 }, mode: "house",
         color: pal[i], pers: i, releaseT: i * P.releaseGap,
         bob: Math.random() * 6.28, speed: P.ghostSpeed,
       });
@@ -147,10 +167,10 @@
     var ps = findChar("P");
     player.x = ps.x; player.y = ps.y;
     player.dir = { x: 0, y: 0 }; player.want = { x: -1, y: 0 };
-    var homes = [5, 6, 7, 6];
+    var homes = [HOUSE.x - 1, HOUSE.x, HOUSE.x + 1, HOUSE.x];
     for (var i = 0; i < ghosts.length; i++) {
       var g = ghosts[i];
-      g.x = homes[i]; g.y = 5; g.dir = { x: -1, y: 0 };
+      g.x = homes[i]; g.y = HOUSE.y; g.dir = { x: -1, y: 0 };
       g.mode = "house"; g.releaseT = i * P.releaseGap; g.speed = P.ghostSpeed;
     }
     frightT = 0; fruit = null;
@@ -231,7 +251,7 @@
       // Eyes take the shortest maze path home (BFS, U-turns allowed):
       // every step shortens the trip, so eyes ALWAYS make it back and
       // eaten monsters always regenerate.
-      var hd = bfsStepTo(cx, cy, 6, 5);
+      var hd = bfsStepTo(cx, cy, HOUSE.x, HOUSE.y);
       if (hd) { g.dir = hd; return; }
       // already home (or unreachable): hold still; the update loop
       // walks us into the house as soon as we're close
@@ -446,14 +466,14 @@
         } else if (g.mode === "leaving") {
           // scoot to the door, then out (door is below the house)
           var sp = g.speed * dt;
-          if (Math.abs(g.x - 6) > 0.08) g.x += Math.sign(6 - g.x) * Math.min(sp, Math.abs(6 - g.x));
-          else if (g.y < 5.98) g.y += sp;
-          else { g.y = 6; g.mode = "active"; g.dir = { x: 0, y: 1 }; }
+          if (Math.abs(g.x - HOUSE.x) > 0.08) g.x += Math.sign(HOUSE.x - g.x) * Math.min(sp, Math.abs(HOUSE.x - g.x));
+          else if (g.y < HOUSE.y + 1.98) g.y += sp;
+          else { g.y = HOUSE.y + 2; g.mode = "active"; g.dir = { x: 0, y: 1 }; }
         } else {
           g.speed = (g.mode === "eyes" ? 11 : P.ghostSpeed) * (frightT > 0 && g.mode === "active" ? 0.72 : 1);
           stepEntity(g, dt, false);
-          if (g.mode === "eyes" && Math.abs(g.x - 6) < 0.25 && Math.abs(g.y - 5) < 0.25) {
-            g.x = 6; g.y = 5; g.mode = "leaving";
+          if (g.mode === "eyes" && Math.abs(g.x - HOUSE.x) < 0.25 && Math.abs(g.y - HOUSE.y) < 0.25) {
+            g.x = HOUSE.x; g.y = HOUSE.y; g.mode = "leaving";
           }
         }
 
@@ -779,10 +799,10 @@
       // monsters as spinning stars orbiting the middle
       for (var si = 0; si < ghosts.length; si++) {
         var sa = stateT * 2.2 + si * Math.PI / 2;
-        drawStar(ox + 6.5 * ts + Math.cos(sa) * ts * 2.6, oy + 5.5 * ts + Math.sin(sa) * ts * 1.8,
+        drawStar(ox + COLS / 2 * ts + Math.cos(sa) * ts * 2.6, oy + ROWS / 2 * ts + Math.sin(sa) * ts * 1.8,
                  ts * 0.5, stateT * 5 + si, ghosts[si].color);
       }
-      drawMunch(ox + 6.5 * ts, oy + 5.5 * ts + Math.sin(stateT * 8) * ts * 0.2,
+      drawMunch(ox + COLS / 2 * ts, oy + ROWS / 2 * ts + Math.sin(stateT * 8) * ts * 0.2,
                 ts * 0.5, { x: 1, y: 0 }, stateT * 14, true);
     } else {
       // Miss Munch
