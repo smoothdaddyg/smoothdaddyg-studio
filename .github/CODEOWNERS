@@ -1,0 +1,20 @@
+# CODEOWNERS — smoothdaddyg-studio
+# Every game is owned by @smoothdaddyg. Any pull request touching an
+# existing game automatically requests his review. New games go in
+# games/<new-id>/ — reviewers check them against AGENTS.md before approval.
+#
+# Branch protection on `main` requires 1 approving review before merge,
+# so nothing lands (and auto-deploys to smoothdaddyg.com) unreviewed.
+
+# All existing games: owner must review any change
+games/*/ @smoothdaddyg
+
+# Shared site code: owner must review
+js/ @smoothdaddyg
+css/ @smoothdaddyg
+index.html @smoothdaddyg
+games.html @smoothdaddyg
+
+# Repo workflow docs
+AGENTS.md @smoothdaddyg
+TASKS.md @smoothdaddyg
