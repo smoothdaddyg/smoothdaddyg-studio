@@ -38,6 +38,8 @@ How we work on this site. Both human developers and their agents follow this.
   to pick up instantly.
 - Public brand: professional, cool, retro, big-company feel. Never mention
   family, kids, dads, or "Our Story" anywhere on the site.
+- Mazes: no big open areas — every pathway must have walls on both sides —
+  and walls are exactly one block thick (Miss Munch rule, 2026-10-10).
 
 ## Deploy checklist (manual zip path)
 - Build from a COPY of the source (never stamp the source tree): use
