@@ -80,13 +80,15 @@
 
   // layout: tile size + maze origin
   var ts = 20, ox = 0, oy = 0;
-  var wallCache = null;
+  var wallCache = null, bgCache = null;
   function layout() {
-    // the maze fills the ENTIRE screen — no reserved HUD band
+    // the maze is as large as the screen allows — no reserved HUD band;
+    // the brick field behind it fills every leftover pixel edge to edge
     ts = Math.floor(Math.min(W / COLS, H / ROWS));
     ox = Math.round((W - ts * COLS) / 2);
     oy = Math.round((H - ts * ROWS) / 2);
     wallCache = null;
+    bgCache = null;
   }
 
   /* ---------------- tiles ---------------- */
@@ -185,19 +187,66 @@
     return null;                                                                // shy & lazy: random
   }
 
+  // Breadth-first search: the first step from (sx,sy) toward (tx,ty)
+  // through tiles eyes can travel. U-turns allowed — every step strictly
+  // shortens the trip, so eyes can never get stuck in a loop.
+  function bfsStepTo(sx, sy, tx, ty) {
+    if (sx === tx && sy === ty) return null;
+    var seen = {}, prev = {};
+    var sk = sx + "," + sy;
+    seen[sk] = true;
+    var qx = [sx], qy = [sy], qh = 0, found = false;
+    while (qh < qx.length) {
+      var x = qx[qh], y = qy[qh]; qh++;
+      if (x === tx && y === ty) { found = true; break; }
+      for (var i = 0; i < 4; i++) {
+        var nx = x + DIRS[i].x, ny = y + DIRS[i].y;
+        if (ny < 0 || ny >= ROWS) continue;
+        nx = ((nx % COLS) + COLS) % COLS;
+        var k = nx + "," + ny;
+        if (seen[k] || !walkable(nx, ny, true, true)) continue;
+        seen[k] = true;
+        prev[k] = x + "," + y;
+        qx.push(nx); qy.push(ny);
+      }
+    }
+    if (!found) return null;
+    // walk back from the target; the last hop is the first step
+    var cx = tx, cy = ty;
+    for (;;) {
+      var pk = prev[cx + "," + cy].split(",");
+      var px = +pk[0], py = +pk[1];
+      if (px === sx && py === sy) {
+        var dx = cx - sx, dy = cy - sy;
+        if (dx > 1) dx = -1; else if (dx < -1) dx = 1;  // tunnel wrap
+        return { x: dx, y: dy };
+      }
+      cx = px; cy = py;
+    }
+  }
+
   function decideGhost(g, cx, cy) {
     var eyes = g.mode === "eyes";
+    if (eyes) {
+      // Eyes take the shortest maze path home (BFS, U-turns allowed):
+      // every step shortens the trip, so eyes ALWAYS make it back and
+      // eaten monsters always regenerate.
+      var hd = bfsStepTo(cx, cy, 6, 5);
+      if (hd) { g.dir = hd; return; }
+      // already home (or unreachable): hold still; the update loop
+      // walks us into the house as soon as we're close
+      g.dir = { x: 0, y: 0 };
+      return;
+    }
     var opts = [];
     for (var i = 0; i < 4; i++) {
       var d = DIRS[i];
       if (opposite(d, g.dir)) continue;                 // no U-turns
-      if (walkable(cx + d.x, cy + d.y, true, eyes)) opts.push(d);
+      if (walkable(cx + d.x, cy + d.y, true, false)) opts.push(d);
     }
     if (!opts.length) { g.dir = { x: -g.dir.x, y: -g.dir.y }; return; }
     var pick;
-    if (eyes) {
-      pick = minDistOpt(opts, cx, cy, 6, 5);            // eyes fly home to the house
-    } else if (frightT > 0) {
+    if (frightT > 0) {
       pick = opts[(Math.random() * opts.length) | 0];   // scared: run anywhere
     } else {
       var t = ghostTarget(g);
@@ -218,24 +267,36 @@
   }
 
   function stepEntity(e, dt, isPlayer) {
+    // Tile-center to tile-center movement: the entity always travels
+    // toward the next tile center ahead, and reconsiders its direction
+    // every time it arrives (so the player can turn at intersections
+    // and monsters/eyes repath at every tile, not just at walls).
     var sp = e.speed * dt;
     if (e.dir.x === 0 && e.dir.y === 0) {
-      if (isPlayer) decidePlayer(Math.round(e.x), Math.round(e.y));
-      else if (e.mode === "active" || e.mode === "eyes") decideGhost(e, Math.round(e.x), Math.round(e.y));
+      var cx0 = Math.round(e.x), cy0 = Math.round(e.y);
+      e.x = cx0; e.y = cy0;
+      if (isPlayer) decidePlayer(cx0, cy0);
+      else if (e.mode === "active" || e.mode === "eyes") decideGhost(e, cx0, cy0);
       if (e.dir.x === 0 && e.dir.y === 0) return;
     }
-    var cx = Math.round(e.x), cy = Math.round(e.y);
-    var tx = cx + e.dir.x, ty = cy + e.dir.y;
-    if (!canEnter(e, tx, ty, isPlayer)) {
-      // wall ahead: stop at this tile and reconsider
-      e.x = cx; e.y = cy;
-      if (isPlayer) decidePlayer(cx, cy);
-      else decideGhost(e, cx, cy);
+    // next tile center in the direction of travel
+    var nx, ny;
+    if (e.dir.x > 0) { nx = Math.floor(e.x) + 1; ny = Math.round(e.y); }
+    else if (e.dir.x < 0) { nx = Math.ceil(e.x) - 1; ny = Math.round(e.y); }
+    else if (e.dir.y > 0) { nx = Math.round(e.x); ny = Math.floor(e.y) + 1; }
+    else { nx = Math.round(e.x); ny = Math.ceil(e.y) - 1; }
+    if (!canEnter(e, nx, ny, isPlayer)) {
+      // wall ahead: stop at this tile's center and reconsider
+      e.x = nx - e.dir.x; e.y = ny - e.dir.y;
+      tunnelWrap(e);
+      var sx = Math.round(e.x), sy = Math.round(e.y);
+      if (isPlayer) decidePlayer(sx, sy);
+      else decideGhost(e, sx, sy);
       return;
     }
-    var distC = Math.abs(tx - e.x) + Math.abs(ty - e.y);
+    var distC = Math.abs(nx - e.x) + Math.abs(ny - e.y);
     if (sp >= distC) {
-      e.x = tx; e.y = ty;
+      e.x = nx; e.y = ny;
       tunnelWrap(e);
       var ncx = Math.round(e.x), ncy = Math.round(e.y);
       if (isPlayer) decidePlayer(ncx, ncy);
@@ -250,8 +311,8 @@
   function addScore(n) { score += n; }
 
   function boom(x, y, big) {
-    // tile coords -> pixel burst
-    var px = ox + x * ts, py = oy + y * ts;
+    // tile coords -> pixel burst (centered in the tile)
+    var px = ox + (x + 0.5) * ts, py = oy + (y + 0.5) * ts;
     var n = big ? 46 : 22;
     for (var i = 0; i < n; i++) {
       var a = Math.random() * 6.283, s = (0.5 + Math.random()) * ts * (big ? 9 : 5);
@@ -459,100 +520,141 @@
     ctx.closePath();
   }
 
+  // one chunky toy brick: bright rounded cap + glossy highlight
+  function brickCap(c, x, y, alpha) {
+    var inset = Math.max(2, ts * 0.10);
+    var rad = ts * 0.22;
+    c.save();
+    c.globalAlpha = alpha;
+    c.fillStyle = "#6f5bff";
+    c.beginPath();
+    c.moveTo(x + inset + rad, y + inset);
+    c.arcTo(x + ts - inset, y + inset, x + ts - inset, y + ts - inset, rad);
+    c.arcTo(x + ts - inset, y + ts - inset, x + inset, y + ts - inset, rad);
+    c.arcTo(x + inset, y + ts - inset, x + inset, y + inset, rad);
+    c.arcTo(x + inset, y + inset, x + ts - inset, y + inset, rad);
+    c.closePath(); c.fill();
+    // glossy top highlight
+    c.fillStyle = "rgba(255,255,255,0.28)";
+    c.beginPath();
+    c.moveTo(x + inset + rad, y + inset);
+    c.arcTo(x + ts - inset, y + inset, x + ts - inset, y + inset + ts * 0.30, rad * 0.6);
+    c.lineTo(x + inset, y + inset + ts * 0.30);
+    c.arcTo(x + inset, y + inset, x + inset + rad, y + inset, rad * 0.6);
+    c.closePath(); c.fill();
+    c.restore();
+  }
+
+  function renderBackground() {
+    // full-screen brick field on the maze's own tile grid, so the game
+    // fills the entire screen on any phone or tablet; the blue maze
+    // floor is carved out of it, maze walls drawn bright on top
+    bgCache = document.createElement("canvas");
+    bgCache.width = W; bgCache.height = H;
+    var c = bgCache.getContext("2d");
+    c.fillStyle = "#241d5e";
+    c.fillRect(0, 0, W, H);
+    var q0 = Math.floor((0 - ox) / ts) - 1, q1 = Math.ceil((W - ox) / ts) + 1;
+    var r0 = Math.floor((0 - oy) / ts) - 1, r1 = Math.ceil((H - oy) / ts) + 1;
+    for (var r = r0; r <= r1; r++)
+      for (var q = q0; q <= q1; q++)
+        brickCap(c, ox + q * ts, oy + r * ts, 0.45);
+    var bg = c.createLinearGradient(0, oy, 0, oy + ROWS * ts);
+    bg.addColorStop(0, "#070a24"); bg.addColorStop(1, "#101a4e");
+    c.fillStyle = bg;
+    c.fillRect(ox, oy, COLS * ts, ROWS * ts);
+  }
+
   function renderWalls() {
     // chunky toy bricks: deep purple blocks with a bright rounded cap
     wallCache = document.createElement("canvas");
     wallCache.width = COLS * ts; wallCache.height = ROWS * ts;
     var c = wallCache.getContext("2d");
-    var inset = Math.max(2, ts * 0.10);
     for (var r = 0; r < ROWS; r++) {
       for (var q = 0; q < COLS; q++) {
         if (grid[r][q] !== "#") continue;
-        var x = q * ts, y = r * ts;
         c.fillStyle = "#241d5e";
-        c.fillRect(x, y, ts, ts);
-        // rounded bright cap
-        c.fillStyle = "#6f5bff";
-        var rad = ts * 0.22;
-        c.beginPath();
-        c.moveTo(x + inset + rad, y + inset);
-        c.arcTo(x + ts - inset, y + inset, x + ts - inset, y + ts - inset, rad);
-        c.arcTo(x + ts - inset, y + ts - inset, x + inset, y + ts - inset, rad);
-        c.arcTo(x + inset, y + ts - inset, x + inset, y + inset, rad);
-        c.arcTo(x + inset, y + inset, x + ts - inset, y + inset, rad);
-        c.closePath(); c.fill();
-        // glossy top highlight
-        c.fillStyle = "rgba(255,255,255,0.28)";
-        c.beginPath();
-        c.moveTo(x + inset + rad, y + inset);
-        c.arcTo(x + ts - inset, y + inset, x + ts - inset, y + inset + ts * 0.30, rad * 0.6);
-        c.lineTo(x + inset, y + inset + ts * 0.30);
-        c.arcTo(x + inset, y + inset, x + inset + rad, y + inset, rad * 0.6);
-        c.closePath(); c.fill();
+        c.fillRect(q * ts, r * ts, ts, ts);
+        brickCap(c, q * ts, r * ts, 1);
       }
     }
   }
 
   function drawMunch(px, py, r, dir, mouthPhase, happy) {
-    // Miss Munch: a cute round girl face. Her big smile opens and
-    // closes as she munches (mouthPhase), leaning toward her direction.
+    // Miss Munch: unmistakably a girl — brown hair framing her face,
+    // two big pigtails, a big bow, and eyelashes. Her big smile opens
+    // and closes as she munches (mouthPhase), leaning toward her direction.
     var mx = px + dir.x * r * 0.18, my = py + dir.y * r * 0.18;
-    // pigtails
+    // hair: full mass behind the face so it frames her clearly
     ctx.fillStyle = "#8a5a2b";
-    ctx.beginPath(); ctx.arc(px - r * 0.92, py - r * 0.30, r * 0.34, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(px + r * 0.92, py - r * 0.30, r * 0.34, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px, py - r * 0.05, r * 1.04, 0, 6.29); ctx.fill();
+    // two big pigtails sticking out past her cheeks
+    ctx.beginPath(); ctx.arc(px - r * 1.04, py - r * 0.16, r * 0.44, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + r * 1.04, py - r * 0.16, r * 0.44, 0, 6.29); ctx.fill();
+    // pink hair ties where pigtails meet her head
     ctx.fillStyle = "#ff5c7a";
-    ctx.beginPath(); ctx.arc(px - r * 0.92, py - r * 0.30, r * 0.13, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(px + r * 0.92, py - r * 0.30, r * 0.13, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px - r * 0.84, py - r * 0.14, r * 0.15, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + r * 0.84, py - r * 0.14, r * 0.15, 0, 6.29); ctx.fill();
     // face
+    var fr = r * 0.9;
     ctx.fillStyle = "#ffd9b3";
-    ctx.beginPath(); ctx.arc(px, py, r, 0, 6.29); ctx.fill();
-    // hair fringe
+    ctx.beginPath(); ctx.arc(px, py, fr, 0, 6.29); ctx.fill();
+    // hair fringe across her forehead
     ctx.fillStyle = "#a06a35";
-    ctx.beginPath(); ctx.arc(px, py - r * 0.12, r * 0.94, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
-    // her bow stays on top
-    var bw = r * 0.52;
+    ctx.beginPath(); ctx.arc(px, py - fr * 0.12, fr * 0.96, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    // her big bow stays on top
+    var bw = r * 0.6;
     ctx.fillStyle = "#ff3b6b";
     ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.78);
-    ctx.lineTo(px - bw, py - r * 1.32); ctx.lineTo(px - bw * 0.2, py - r * 0.92);
+    ctx.moveTo(px, py - r * 0.7);
+    ctx.lineTo(px - bw, py - r * 1.34); ctx.lineTo(px - bw * 0.2, py - r * 0.88);
     ctx.closePath(); ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.78);
-    ctx.lineTo(px + bw, py - r * 1.32); ctx.lineTo(px + bw * 0.2, py - r * 0.92);
+    ctx.moveTo(px, py - r * 0.7);
+    ctx.lineTo(px + bw, py - r * 1.34); ctx.lineTo(px + bw * 0.2, py - r * 0.88);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#d41e4e";
-    ctx.beginPath(); ctx.arc(px, py - r * 0.94, r * 0.17, 0, 6.29); ctx.fill();
-    // big friendly eyes
-    var ex = r * 0.34, ey = -r * 0.08;
+    ctx.beginPath(); ctx.arc(px, py - r * 0.88, r * 0.19, 0, 6.29); ctx.fill();
+    // big friendly eyes with eyelashes
+    var ex = fr * 0.34, ey = -fr * 0.06;
+    ctx.strokeStyle = "#3a2a1a"; ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.lineCap = "round";
     for (var s2 = -1; s2 <= 1; s2 += 2) {
+      var exx = mx + s2 * ex - dir.x * fr * 0.1, eyy = my + ey;
+      // three lashes fanning up and out from each eye's outer corner
+      for (var li = 0; li < 3; li++) {
+        var lx0 = exx + s2 * fr * (0.16 + li * 0.02), ly0 = eyy - fr * 0.14 + li * fr * 0.09;
+        ctx.beginPath();
+        ctx.moveTo(lx0, ly0);
+        ctx.lineTo(lx0 + s2 * fr * 0.14, ly0 - fr * 0.14);
+        ctx.stroke();
+      }
       ctx.fillStyle = "#ffffff";
-      ctx.beginPath(); ctx.arc(mx + s2 * ex - dir.x * r * 0.1, my + ey, r * 0.22, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(exx, eyy, fr * 0.22, 0, 6.29); ctx.fill();
       ctx.fillStyle = "#3a2a1a";
-      ctx.beginPath(); ctx.arc(mx + s2 * ex + dir.x * r * 0.06, my + ey + r * 0.04, r * 0.11, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(exx + dir.x * fr * 0.06, eyy + fr * 0.04, fr * 0.11, 0, 6.29); ctx.fill();
       ctx.fillStyle = "#ffffff";
-      ctx.beginPath(); ctx.arc(mx + s2 * ex + dir.x * r * 0.06 - r * 0.03, my + ey, r * 0.04, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(exx + dir.x * fr * 0.06 - fr * 0.03, eyy, fr * 0.04, 0, 6.29); ctx.fill();
     }
     // rosy cheeks
     ctx.fillStyle = "rgba(255,120,150,0.55)";
-    ctx.beginPath(); ctx.arc(mx - r * 0.52, my + r * 0.28, r * 0.17, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(mx + r * 0.52, my + r * 0.28, r * 0.17, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx - fr * 0.52, my + fr * 0.28, fr * 0.17, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx + fr * 0.52, my + fr * 0.28, fr * 0.17, 0, 6.29); ctx.fill();
     // the munching smile: opens and closes with mouthPhase
     var mo = 0.25 + 0.75 * Math.abs(Math.sin(mouthPhase));
     ctx.fillStyle = "#7a2e2e";
     ctx.beginPath();
-    ctx.ellipse(mx + dir.x * r * 0.12, my + r * 0.42 + dir.y * r * 0.1, r * 0.30, r * 0.30 * mo + r * 0.05, 0, 0, 6.29);
+    ctx.ellipse(mx + dir.x * fr * 0.12, my + fr * 0.42 + dir.y * fr * 0.1, fr * 0.30, fr * 0.30 * mo + fr * 0.05, 0, 0, 6.29);
     ctx.fill();
     if (happy) {
       ctx.fillStyle = "#ffffff";
-      ctx.beginPath(); ctx.arc(mx - r * 0.30, my - r * 0.32, r * 0.09, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(mx - fr * 0.30, my - fr * 0.32, fr * 0.09, 0, 6.29); ctx.fill();
     }
   }
 
   function drawGhost(g) {
     // Grumpy blobs: chunky round bodies with stubby feet — no ghost
     // skirt anywhere. Angry brows when chasing, dizzy when frightened.
-    var px = ox + g.x * ts, py = oy + g.y * ts;
+    var px = ox + (g.x + 0.5) * ts, py = oy + (g.y + 0.5) * ts;
     var r = ts * 0.46;
     var fright = frightT > 0 && g.mode === "active";
     var flash = fright && frightT < 1.5 && ((frightT * 6) | 0) % 2 === 0;
@@ -635,10 +737,9 @@
   }
 
   function draw() {
-    // background
-    var bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, "#070a24"); bg.addColorStop(1, "#101a4e");
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    // background: full-screen brick field with the maze floor carved out
+    if (!bgCache) renderBackground();
+    ctx.drawImage(bgCache, 0, 0);
 
     if (!wallCache) renderWalls();
     var flash = state === "clear" && ((flashT * 5) | 0) % 2 === 0;
@@ -646,13 +747,13 @@
     ctx.drawImage(wallCache, ox, oy);
     if (flash) ctx.restore();
 
-    // dots
+    // dots (centered in the middle of each lane)
     var dotR = Math.max(2, ts * 0.09);
     ctx.fillStyle = "#ffc78f";
     for (var r = 0; r < ROWS; r++) {
       for (var q = 0; q < COLS; q++) {
         if (dots[r][q] !== 1) continue;
-        ctx.beginPath(); ctx.arc(ox + q * ts, oy + r * ts, dotR, 0, 6.29); ctx.fill();
+        ctx.beginPath(); ctx.arc(ox + (q + 0.5) * ts, oy + (r + 0.5) * ts, dotR, 0, 6.29); ctx.fill();
       }
     }
     // power pellets (pulse)
@@ -661,13 +762,13 @@
     for (var r2 = 0; r2 < ROWS; r2++) {
       for (var q2 = 0; q2 < COLS; q2++) {
         if (dots[r2][q2] !== 2) continue;
-        ctx.beginPath(); ctx.arc(ox + q2 * ts, oy + r2 * ts, pr, 0, 6.29); ctx.fill();
+        ctx.beginPath(); ctx.arc(ox + (q2 + 0.5) * ts, oy + (r2 + 0.5) * ts, pr, 0, 6.29); ctx.fill();
       }
     }
 
     // fruit
     if (fruit) {
-      var fx = ox + fruit.x * ts, fy = oy + fruit.y * ts;
+      var fx = ox + (fruit.x + 0.5) * ts, fy = oy + (fruit.y + 0.5) * ts;
       var fr = ts * 0.3 * (1 + 0.08 * Math.sin(performance.now() / 150));
       ctx.fillStyle = "#ff3b30";
       ctx.beginPath(); ctx.arc(fx - fr * 0.5, fy + fr * 0.2, fr * 0.62, 0, 6.29); ctx.fill();
@@ -683,16 +784,16 @@
       // monsters as spinning stars orbiting the middle
       for (var si = 0; si < ghosts.length; si++) {
         var sa = stateT * 2.2 + si * Math.PI / 2;
-        drawStar(ox + 6 * ts + Math.cos(sa) * ts * 2.6, oy + 5 * ts + Math.sin(sa) * ts * 1.8,
+        drawStar(ox + 6.5 * ts + Math.cos(sa) * ts * 2.6, oy + 5.5 * ts + Math.sin(sa) * ts * 1.8,
                  ts * 0.5, stateT * 5 + si, ghosts[si].color);
       }
-      drawMunch(ox + 6 * ts, oy + 5 * ts + Math.sin(stateT * 8) * ts * 0.2,
+      drawMunch(ox + 6.5 * ts, oy + 5.5 * ts + Math.sin(stateT * 8) * ts * 0.2,
                 ts * 0.5, { x: 1, y: 0 }, stateT * 14, true);
     } else {
       // Miss Munch
       if (!(state === "dying" && stateT > 1.0)) {
         var shrink = state === "dying" ? Math.max(0.05, 1 - stateT / 1.1) : 1;
-        drawMunch(ox + player.x * ts, oy + player.y * ts, ts * 0.46 * shrink,
+        drawMunch(ox + (player.x + 0.5) * ts, oy + (player.y + 0.5) * ts, ts * 0.46 * shrink,
                   player.dir.x || player.dir.y ? player.dir : { x: 1, y: 0 }, player.mouth, false);
       }
       for (var gi = 0; gi < ghosts.length; gi++) drawGhost(ghosts[gi]);
@@ -772,24 +873,28 @@
   }
 
   function drawMiniMunch(x, y, r) {
+    // tiny version of Miss Munch for the lives HUD: pigtails, bow, face
+    ctx.fillStyle = "#8a5a2b";
+    ctx.beginPath(); ctx.arc(x - r * 1.0, y - r * 0.15, r * 0.42, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r * 1.0, y - r * 0.15, r * 0.42, 0, 6.29); ctx.fill();
     ctx.fillStyle = "#ffd9b3";
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, 6.29); ctx.fill();
     ctx.fillStyle = "#a06a35";
-    ctx.beginPath(); ctx.arc(x, y - r * 0.12, r * 0.94, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y - r * 0.11, r * 0.86, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
     ctx.fillStyle = "#ff3b6b";
     ctx.beginPath();
-    ctx.moveTo(x, y - r * 0.78);
-    ctx.lineTo(x - r * 0.5, y - r * 1.3); ctx.lineTo(x - r * 0.1, y - r * 0.9);
+    ctx.moveTo(x, y - r * 0.68);
+    ctx.lineTo(x - r * 0.55, y - r * 1.3); ctx.lineTo(x - r * 0.12, y - r * 0.86);
     ctx.closePath(); ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x, y - r * 0.78);
-    ctx.lineTo(x + r * 0.5, y - r * 1.3); ctx.lineTo(x + r * 0.1, y - r * 0.9);
+    ctx.moveTo(x, y - r * 0.68);
+    ctx.lineTo(x + r * 0.55, y - r * 1.3); ctx.lineTo(x + r * 0.12, y - r * 0.86);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#3a2a1a";
-    ctx.beginPath(); ctx.arc(x - r * 0.32, y - r * 0.05, r * 0.13, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + r * 0.32, y - r * 0.05, r * 0.13, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.02, r * 0.12, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r * 0.3, y - r * 0.02, r * 0.12, 0, 6.29); ctx.fill();
     ctx.fillStyle = "#7a2e2e";
-    ctx.beginPath(); ctx.ellipse(x, y + r * 0.42, r * 0.3, r * 0.18, 0, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x, y + r * 0.38, r * 0.27, r * 0.16, 0, 0, 6.29); ctx.fill();
   }
 
   /* ---------------- input: swipe anywhere to steer ---------------- */

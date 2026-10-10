@@ -128,5 +128,45 @@ M._press(0, 0);
 const before = M._dotsLeft();
 ok("dots remain to eat", before > 0);
 
+// 8. player can turn at an intersection (not just at walls)
+M._press(0, 0); M._state("play");
+(function () {
+  const gs = M._ghosts();
+  for (let k = 0; k < gs.length; k++) { gs[k].mode = "house"; gs[k].releaseT = 1e9; gs[k].x = 6; gs[k].y = 5; }
+  const p = M._player();
+  p.x = 2; p.y = 8; p.dir = { x: 1, y: 0 }; p.want = { x: 0, y: 0 };
+  let turnedAt = null;
+  for (let i = 0; i < 300; i++) {
+    if (p.x > 2.5 && !p.want.x && !p.want.y) p.want = { x: 0, y: -1 };
+    M._frame(1 / 60);
+    for (let k = 0; k < gs.length; k++) { gs[k].mode = "house"; gs[k].releaseT = 1e9; }
+    if (p.dir.y === -1) { turnedAt = Math.round(p.x); break; }
+  }
+  // (4,7) is the first walkable up-turn heading right along row 8
+  eq("player turns up at the x=4 intersection", turnedAt, 4);
+})();
+
+// 9. eaten monsters regenerate: eyes always path home and reactivate
+function eyesRegen(sx, sy) {
+  M._press(0, 0); M._state("play");
+  const gs = M._ghosts();
+  const g = gs[0];
+  g.mode = "eyes"; g.x = sx; g.y = sy; g.dir = { x: 1, y: 0 };
+  for (let k = 1; k < gs.length; k++) { gs[k].mode = "house"; gs[k].releaseT = 1e9; gs[k].x = 6; gs[k].y = 5; }
+  const p = M._player();
+  p.x = 1; p.y = 9; p.dir = { x: 0, y: 0 }; p.want = { x: 0, y: 0 };
+  for (let i = 0; i < 60 * 20; i++) {
+    M._frame(1 / 60);
+    for (let k = 1; k < gs.length; k++) { gs[k].mode = "house"; gs[k].releaseT = 1e9; }
+    if (g.mode === "active") return true;
+    if (M._state() !== "play") return false;
+  }
+  return false;
+}
+ok("eyes regenerate from far corner (1,1)", eyesRegen(1, 1));
+ok("eyes regenerate from (11,9)", eyesRegen(11, 9));
+ok("eyes regenerate from below the house (6,7)", eyesRegen(6, 7));
+ok("eyes regenerate from the (3,3) corridor", eyesRegen(3, 3));
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
