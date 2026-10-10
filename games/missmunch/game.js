@@ -581,40 +581,35 @@
   }
 
   function drawMunch(px, py, r, dir, mouthPhase, happy) {
-    // Miss Munch: unmistakably a girl — hair worn high on her head in
-    // two pigtails with pink ties, a big bow, and eyelashes. Her big
-    // smile opens and closes as she munches (mouthPhase), leaning
-    // toward her direction.
+    // Miss Munch: unmistakably a girl — long brown hair (two thick locks
+    // flowing past her chin, clearly hair not fur), a big red bow,
+    // eyelashes, blush. Her smile munches open/closed (mouthPhase),
+    // leaning toward her direction.
     var mx = px + dir.x * r * 0.18, my = py + dir.y * r * 0.18;
-    // two high pigtails (behind everything, clearly hair on top)
-    ctx.fillStyle = "#8a5a2b";
-    ctx.beginPath(); ctx.arc(px - r * 0.62, py - r * 0.80, r * 0.38, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(px + r * 0.62, py - r * 0.80, r * 0.38, 0, 6.29); ctx.fill();
-    // pink ties where pigtails meet her head
-    ctx.fillStyle = "#ff5c7a";
-    ctx.beginPath(); ctx.arc(px - r * 0.50, py - r * 0.62, r * 0.13, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(px + r * 0.50, py - r * 0.62, r * 0.13, 0, 6.29); ctx.fill();
-    // hair cap across the top of her head
-    ctx.fillStyle = "#8a5a2b";
-    ctx.beginPath(); ctx.arc(px, py - r * 0.20, r * 1.0, 0, 6.29); ctx.fill();
-    // face
-    var fr = r * 0.92;
+    var hair = "#7a4f24";
+    // long hair: two thick locks behind her face, from above her head
+    // to well below her chin — elongated so they read as hair, not ears
+    ctx.fillStyle = hair;
+    roundRect(px - r * 1.08, py - r * 0.92, r * 0.52, r * 2.24, r * 0.26); ctx.fill();
+    roundRect(px + r * 0.56, py - r * 0.92, r * 0.52, r * 2.24, r * 0.26); ctx.fill();
+    // face: the dominant round shape, warm skin tone
+    var fr = r * 0.88;
     ctx.fillStyle = "#ffd9b3";
     ctx.beginPath(); ctx.arc(px, py, fr, 0, 6.29); ctx.fill();
-    // fringe across her forehead
+    // fringe across her forehead (hair, on top only)
     ctx.fillStyle = "#a06a35";
-    ctx.beginPath(); ctx.arc(px, py - fr * 0.12, fr * 0.96, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
-    // her big bow sits on top: two loops + knot
-    var bowY = py - r * 1.06;
+    ctx.beginPath(); ctx.arc(px, py - fr * 0.10, fr * 0.98, Math.PI * 1.04, Math.PI * 1.96); ctx.fill();
+    // big bow on the upper right — unmistakable
+    var bowX = px + r * 0.48, bowY = py - r * 0.92;
     ctx.fillStyle = "#ff3b6b";
     ctx.beginPath();
-    ctx.ellipse(px - r * 0.34, bowY, r * 0.32, r * 0.21, -0.45, 0, 6.29);
+    ctx.ellipse(bowX - r * 0.32, bowY, r * 0.32, r * 0.21, -0.5, 0, 6.29);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(px + r * 0.34, bowY, r * 0.32, r * 0.21, 0.45, 0, 6.29);
+    ctx.ellipse(bowX + r * 0.32, bowY, r * 0.32, r * 0.21, 0.5, 0, 6.29);
     ctx.fill();
     ctx.fillStyle = "#d41e4e";
-    ctx.beginPath(); ctx.arc(px, bowY, r * 0.15, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(bowX, bowY, r * 0.15, 0, 6.29); ctx.fill();
     // big friendly eyes with eyelashes
     var ex = fr * 0.34, ey = -fr * 0.06;
     ctx.strokeStyle = "#3a2a1a"; ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.lineCap = "round";
@@ -873,24 +868,23 @@
   }
 
   function drawMiniMunch(x, y, r) {
-    // tiny version of Miss Munch for the lives HUD: high pigtails, bow, face
-    ctx.fillStyle = "#8a5a2b";
-    ctx.beginPath(); ctx.arc(x - r * 0.6, y - r * 0.78, r * 0.36, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + r * 0.6, y - r * 0.78, r * 0.36, 0, 6.29); ctx.fill();
-    ctx.beginPath(); ctx.arc(x, y - r * 0.18, r * 0.98, 0, 6.29); ctx.fill();
+    // tiny version of Miss Munch for the lives HUD: long hair, bow, face
+    ctx.fillStyle = "#7a4f24";
+    roundRect(x - r * 1.05, y - r * 0.9, r * 0.5, r * 2.15, r * 0.25); ctx.fill();
+    roundRect(x + r * 0.55, y - r * 0.9, r * 0.5, r * 2.15, r * 0.25); ctx.fill();
     ctx.fillStyle = "#ffd9b3";
-    ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r * 0.88, 0, 6.29); ctx.fill();
     ctx.fillStyle = "#a06a35";
-    ctx.beginPath(); ctx.arc(x, y - r * 0.11, r * 0.86, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y - r * 0.09, r * 0.86, Math.PI * 1.04, Math.PI * 1.96); ctx.fill();
     ctx.fillStyle = "#ff3b6b";
     ctx.beginPath();
-    ctx.ellipse(x - r * 0.3, y - r * 1.0, r * 0.28, r * 0.18, -0.45, 0, 6.29);
+    ctx.ellipse(x + r * 0.18, y - r * 0.9, r * 0.28, r * 0.18, -0.5, 0, 6.29);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(x + r * 0.3, y - r * 1.0, r * 0.28, r * 0.18, 0.45, 0, 6.29);
+    ctx.ellipse(x + r * 0.74, y - r * 0.9, r * 0.28, r * 0.18, 0.5, 0, 6.29);
     ctx.fill();
     ctx.fillStyle = "#d41e4e";
-    ctx.beginPath(); ctx.arc(x, y - r * 1.0, r * 0.13, 0, 6.29); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r * 0.46, y - r * 0.9, r * 0.13, 0, 6.29); ctx.fill();
     ctx.fillStyle = "#3a2a1a";
     ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.02, r * 0.12, 0, 6.29); ctx.fill();
     ctx.beginPath(); ctx.arc(x + r * 0.3, y - r * 0.02, r * 0.12, 0, 6.29); ctx.fill();
