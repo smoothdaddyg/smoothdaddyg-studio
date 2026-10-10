@@ -29,43 +29,28 @@
   var audio = makeAudio();
 
   /* ---------------- mazes ---------------- */
-  var COLS = 13, ROWS = 28;
+  var COLS = 13, ROWS = 13;
   // # wall, . dot, o power pellet, P player start, G monster house,
   // - house door, space walkable (no dot)
-  // Tall maze that fills a phone screen. EVERY pathway is 1 tile wide
-  // with walls on both sides — no big open rooms anywhere.
+  // Small and simple on purpose: 1-block-thick walls, 3-wide corridors,
+  // a 3x3 grid with 9 intersections. No big open areas.
   var MAZE_GRID = [
     "#############",
-    "#o.........o#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
     "#...........#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.###GGG###.#",
+    "#.o.......o.#",
+    "#...........#",
+    "#...#...#...#",
+    "#...........#",
+    "#....GGG....#",
     "#....---....#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
+    "#...#...#...#",
     "#...........#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#.####.####.#",
-    "#o....P....o#",
-    "#.####.####.#",
+    "#.o...P...o.#",
+    "#...........#",
     "#############",
   ];
   // monster house center (the middle G tile); the door is the row below
-  var HOUSE = { x: 6, y: 12 };
+  var HOUSE = { x: 6, y: 6 };
   var MAZES = [
     { pal: ["#ff5c7a", "#ffb340", "#35c4ff", "#7dff6a"], grid: MAZE_GRID },
     { pal: ["#b45cff", "#5cff8a", "#ffd23b", "#3b8aff"], grid: MAZE_GRID },
