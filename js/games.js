@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "passingfrenzy", title: "Passing Frenzy", desc: "Tap to pass the basketball. Lead your teammates, dodge interceptions, score 10 to win!",
+    hue: 200, sprite: "ball", url: "games/passingfrenzy/" },
   { id: "glamhair", title: "Glam Hair", desc: "Brush, curl, dye and style her hair — then lipstick, blush and bows!",
     hue: 315, sprite: "ball", url: "games/glamhair/" },
   { id: "dancejudge", title: "Dance Judge", desc: "Watch three silly couples dance, then score them 1-10 like a real judge!",
