@@ -18,20 +18,17 @@
     RED_COUNT: 6,         // visible red players
     PLAYER_R: 18,         // player body radius (px)
     CATCH_R: 30,          // catch/pickup radius — a touch bigger than the body
-    SPEED_MIN: 55,        // player speed px/s
-    SPEED_MAX: 95,
+    SPEED_MIN: 40,        // player speed px/s — wide range, some much faster
+    SPEED_MAX: 140,
     DRIFT: 26,            // max horizontal drift px/s
     BALL_MUL: 2.5,        // ball speed = BALL_MUL x average player speed
-    AI_DELAY_MIN: 0.5,    // red AI thinking time (s)
-    AI_DELAY_MAX: 1.5,
     WIN_SCORE: 10,
-    PTS: 2,               // points per basket
+    PTS: 2,               // points per basket / per interception
     SHOOT_ZONE: 85,       // tap within this of a basket = a shot attempt
     SCORE_R: 30,          // ball within this of basket center = bucket
-    AI_SHOOT_RANGE: 300,  // red shoots when closer than this to its basket
     THROWER_GRACE: 0.20,  // s before the thrower can re-catch their own pass
     CELEBRATE_T: 1.7,     // basket celebration (s)
-    SPAWN_MARGIN: 36,      // players spawn/despawn this far off-screen
+    SPAWN_MARGIN: 36,     // players spawn/despawn this far off-screen
   };
 
   const canvas = document.getElementById("stage");
@@ -51,13 +48,12 @@
   let parts = [];              // particles {x,y,vx,vy,t,life,hue,r}
   let rings = [];              // expanding rings {x,y,r,t,life,hue}
 
-  // ball modes: 'none' | 'carried' | 'flying' | 'loose'
+  // ball modes: 'none' | 'carried' | 'flying'
   let ball = { mode: "none", x: 0, y: 0, carrier: null,
                tx: 0, ty: 0, dx: 0, dy: 0, dist: 0,
                shotBy: null, shotTarget: null,
                thrower: null, throwerT: 0, trail: [] };
 
-  let aiT = 0;                 // red AI decision countdown
   let basketTop = { x: 0, y: 0 };
   let basketBottom = { x: 0, y: 0 };
 
@@ -198,11 +194,7 @@
       rings.push({ x: p.x, y: p.y, r: 12, t: 0, life: 0.4, hue: 0 });
     } else {
       audio.arp([660, 880], 0.06, "triangle", 0.10);
-      burst(p.x, p.y, p.team === "blue" ? 210 : 0, 10, 180);
-    }
-    // red just got it — start thinking
-    if (p.team === "red" && state === "play") {
-      aiT = rnd(CFG.AI_DELAY_MIN, CFG.AI_DELAY_MAX);
+      burst(p.x, p.y, 210, 10, 180);
     }
   }
 
@@ -231,19 +223,6 @@
       if (ball.trail.length > 14) ball.trail.shift();
       for (const tr of ball.trail) tr.t += dt;
 
-      // advance, but stop exactly at the target
-      const remain = dist(ball.x, ball.y, ball.tx, ball.ty);
-      if (remain <= step) {
-        ball.x = ball.tx; ball.y = ball.ty;
-        // one last catch check at the destination…
-        const c = catcherAt(ball.x, ball.y);
-        if (c) { giveBall(c, c.team !== lastThrowTeam()); return; }
-        // …then it sits loose
-        ball.mode = "loose";
-        ball.shotBy = null; ball.shotTarget = null;
-        ball.thrower = null;
-        return;
-      }
       ball.x += ball.dx * step;
       ball.y += ball.dy * step;
 
@@ -257,12 +236,23 @@
       }
       // anyone catch it mid-flight?
       const c = catcherAt(ball.x, ball.y);
-      if (c) giveBall(c, c.team !== lastThrowTeam());
+      if (c) {
+        if (c.team === "red") {
+          // Red interception = instant 2 points, ball resets to blue at bottom
+          scoreBasket("red");
+        } else {
+          giveBall(c, false);
+        }
+        return;
+      }
+      // missed pass flies off-screen, then reappears at the bottom
+      // with a fresh blue player just coming on
+      const M = 60;
+      if (ball.x < -M || ball.x > W + M || ball.y < -M || ball.y > H + M) {
+        resetBallToEdge("blue");
+        return;
+      }
       return;
-    }
-    if (ball.mode === "loose") {
-      const c = catcherAt(ball.x, ball.y);
-      if (c) giveBall(c, false); // loose pickup — no interception drama
     }
   }
 
@@ -288,55 +278,6 @@
     if (blueScore >= CFG.WIN_SCORE || redScore >= CFG.WIN_SCORE) {
       winner = blueScore >= CFG.WIN_SCORE ? "blue" : "red";
       // the win screen takes over after the celebration beat
-    }
-  }
-
-  /* ---------------- red AI ---------------- */
-  function distToSeg(px, py, x1, y1, x2, y2) {
-    const dx = x2 - x1, dy = y2 - y1;
-    const L2 = dx * dx + dy * dy;
-    let t = L2 ? ((px - x1) * dx + (py - y1) * dy) / L2 : 0;
-    t = clamp(t, 0, 1);
-    return dist(px, py, x1 + dx * t, y1 + dy * t);
-  }
-
-  function pathClear(x1, y1, x2, y2, forTeam) {
-    const opp = forTeam === "red" ? "blue" : "red";
-    for (const p of players) {
-      if (p.team !== opp) continue;
-      if (distToSeg(p.x, p.y, x1, y1, x2, y2) < CFG.CATCH_R + 12) return false;
-    }
-    return true;
-  }
-
-  function aiDecide() {
-    const c = ball.carrier;
-    if (!c || c.team !== "red" || ball.mode !== "carried") return;
-    // 1) shoot when close and the lane is open
-    const dB = dist(c.x, c.y, basketBottom.x, basketBottom.y);
-    if (dB < CFG.AI_SHOOT_RANGE &&
-        pathClear(c.x, c.y, basketBottom.x, basketBottom.y, "red")) {
-      throwBall(c.x, c.y, basketBottom.x, basketBottom.y, "red", c, true, "bottom");
-      return;
-    }
-    // 2) best pass: lead a teammate, prefer moving toward the basket, prefer safe
-    let best = null, bestScore = -1e9;
-    const sp = ballSpeed();
-    for (const p of players) {
-      if (p.team !== "red" || p === c) continue;
-      const d = Math.max(1, dist(c.x, c.y, p.x, p.y));
-      const t = d / sp;
-      const tx = clamp(p.x + p.vx * t, 40, W - 40);
-      const ty = clamp(p.y + p.vy * t, 90, H - 90);
-      const advance = ty - c.y;              // + = toward red's basket
-      const safe = pathClear(c.x, c.y, tx, ty, "red") ? 1 : 0;
-      const score = advance * 1.6 + safe * 320 + Math.random() * 120 - d * 0.25;
-      if (score > bestScore) { bestScore = score; best = { x: tx, y: ty }; }
-    }
-    if (best && bestScore > 40) {
-      throwBall(c.x, c.y, best.x, best.y, "red", c, false, null);
-    } else {
-      aiT = rnd(0.35, 0.8); // nothing good — hold and re-think shortly
     }
   }
 
@@ -418,13 +359,6 @@
     }
     if (state === "play" || state === "title" || state === "celebrate" || state === "win") keepRoster();
 
-    // red AI
-    if (state === "play" && ball.mode === "carried" &&
-        ball.carrier && ball.carrier.team === "red") {
-      aiT -= dt;
-      if (aiT <= 0) aiDecide();
-    }
-
     if (state === "play" || state === "celebrate") updateBall(dt);
 
     // celebration beat, then hand the ball to the scored-on team
@@ -440,7 +374,7 @@
             audio.arp([392, 370, 349, 311], 0.14, "triangle", 0.10);
           }
         } else {
-          resetBallToEdge(scoredBy === "blue" ? "red" : "blue");
+          resetBallToEdge("blue"); // blue always has the ball
           state = "play";
         }
       }
@@ -562,7 +496,7 @@
       ctx.beginPath(); ctx.arc(tr.x, tr.y, 11 * k + 2, 0, 6.2832); ctx.fill();
     }
     const x = ball.x, y = ball.y, r = 12;
-    const bob = ball.mode === "loose" ? Math.sin(time * 5) * 2 : 0;
+    const bob = 0;
     ctx.save();
     ctx.shadowColor = "#ff9500"; ctx.shadowBlur = 16;
     const g = ctx.createRadialGradient(x - 4, y - 4 + bob, 2, x, y + bob, r);
@@ -737,10 +671,6 @@
     tap: function (x, y) { onTap(x, y); },
     start: function () { startGame(); },
     step: function (dt) { tick(dt || 0.016); },
-    giveRed: function () {
-      for (const p of players) if (p.team === "red" && !p.hasBall) { giveBall(p, false); aiT = 0; return true; }
-      return false;
-    },
     forceScore: function (team, pts) { // test-only: jump the scoreboard
       if (team === "blue") blueScore = pts; else redScore = pts;
       scoreBasket(team);
