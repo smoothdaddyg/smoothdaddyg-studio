@@ -3,7 +3,7 @@
    A retro sky-defense game in the spirit of the Odyssey era.
    Invaders glide side to side and step down; your ship follows
    your finger and fires on its own. Clear all 24 invaders to
-   win. You have 3 shields — losing them all ends the run.
+   win. Get hit and you pop right back in — no game over, ever.
    One interaction: drag / move anywhere. No reading required.
    ============================================================ */
 
@@ -23,7 +23,8 @@
   const ENEMY_SHOT_SPEED = 260;
   const MAX_ENEMY_SHOTS = 3;
   const DROP = 24;              // px the block steps down at an edge
-  const INVULN_TIME = 1.5;
+  const INVULN_TIME = 1.5;      // grace period after respawn
+  const DOWN_TIME = 1.5;        // death pause before respawn
   const PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51];
   const MARCH = [98, 87.31, 82.41, 73.42]; // iconic 4-note descending bass
 
@@ -120,10 +121,11 @@
   let killSpots = [];  // {x,y,hue} of every kill, for the win fireworks
 
   let shipX = 0, shipY = 0, targetX = 0, spx = 4, hasDragged = false;
-  let score = 0, shields = 3, killStreak = 0;
-  let state = "play";  // "play" | "over" | "win"
+  let score = 0, killStreak = 0;
+  let state = "play";  // "play" | "win"
   let fireT = 0.3, enemyT = 1.0, marchT = 0.4, marchIdx = 0;
   let invulnT = 0, shakeT = 0, flashT = 0, waddleT = 0;
+  let downT = 0;       // death pause: >0 means crashed, waiting to respawn
 
   // Test counters (production no-ops, read by the test hook).
   let boltTotal = 0;
@@ -189,7 +191,6 @@
     targetX = W / 2;
     hasDragged = false;
     score = 0;
-    shields = 3;
     killStreak = 0;
     state = "play";
     fireT = 0.3;
@@ -197,6 +198,7 @@
     marchT = 0.4;
     marchIdx = 0;
     invulnT = 0;
+    downT = 0;
     shakeT = 0;
     flashT = 0;
     boltTotal = 0;
@@ -268,18 +270,13 @@
   }
 
   function hitPlayer() {
-    if (state !== "play" || invulnT > 0) return;
-    shields--;
+    if (state !== "play" || invulnT > 0 || downT > 0) return;
+    // no game over, ever — a hit is a pause, then you pop back in
     killStreak = 0; // the ladder resets when you're hit
-    invulnT = INVULN_TIME;
+    downT = DOWN_TIME;
     shakeT = 0.35;
     burst(shipX, shipY, 190, 18, 320);
     audio.tone(90, 0.3, { type: "sine", vol: 0.25, slideTo: 38 });
-    if (shields <= 0) {
-      state = "over";
-      enemyShots = [];
-      bolts = [];
-    }
   }
 
   function fireBolt() {
@@ -316,7 +313,14 @@
     if (flashT > 0) flashT -= dt;
     waddleT += dt;
 
-    if (state === "play") {
+    if (state === "play" && downT > 0) {
+      // death pause: everything holds still while the smoke clears,
+      // then you pop back in — score and kills kept
+      downT -= dt;
+      if (downT <= 0) invulnT = INVULN_TIME;
+    }
+
+    if (state === "play" && downT <= 0) {
       // auto-fire
       fireT -= dt;
       if (fireT <= 0 && bolts.length < 1) {
@@ -351,7 +355,8 @@
       }
     }
 
-    // player bolts
+    // player bolts (frozen during the death pause)
+    if (downT <= 0) {
     for (let i = bolts.length - 1; i >= 0; i--) {
       const b = bolts[i];
       if (!b) continue; // array may be cleared mid-loop by winGame()
@@ -367,11 +372,13 @@
         }
       }
     }
+    }
 
-    // enemy shots
+    // enemy shots (frozen during the death pause)
+    if (downT <= 0) {
     for (let i = enemyShots.length - 1; i >= 0; i--) {
       const s = enemyShots[i];
-      if (!s) continue; // array may be cleared mid-loop by hitPlayer()
+      if (!s) continue;
       s.y += ENEMY_SHOT_SPEED * dt;
       if (s.y > H + 20) { enemyShots.splice(i, 1); continue; }
       if (state === "play" && invulnT <= 0 &&
@@ -379,6 +386,7 @@
         enemyShots.splice(i, 1);
         hitPlayer();
       }
+    }
     }
 
     // particles
@@ -406,7 +414,7 @@
   }
 
   function onTap(e) {
-    if (state === "over" || state === "win") {
+    if (state === "win") {
       if (window.SDGplays) SDGplays.played("starguard");
       reset(); // tap anywhere to play again
       return;
@@ -496,17 +504,6 @@
     }
   }
 
-  function drawShields() {
-    // 3 small ship icons, top-left — no text
-    for (let i = 0; i < 3; i++) {
-      const x = 34 + i * 40, y = 34;
-      ctx.save();
-      if (i >= shields) ctx.globalAlpha = 0.22; // lost shields go dim
-      drawBitmap(SPR.ship, x, y, 1.8, 190, 8);
-      ctx.restore();
-    }
-  }
-
   function drawReplay() {
     // big pulsing circular replay arrow — no reading
     const cxp = W / 2, cyp = H / 2;
@@ -555,7 +552,7 @@
     drawInvaders();
     drawBolts();
     drawEnemyShots();
-    drawShip();
+    if (downT <= 0) drawShip(); // hidden while crashed
 
     // particles
     for (const p of particles) {
@@ -578,7 +575,6 @@
     if (score > 0) {
       drawPixelNumber(ctx, score, W / 2, 34, 6, "#ffe14d", true);
     }
-    drawShields();
 
     // CRT scanlines
     ctx.fillStyle = "rgba(0,0,0,0.16)";
@@ -594,8 +590,8 @@
 
     ctx.restore();
 
-    // game-over / win overlay (no shake here)
-    if (state === "over" || state === "win") {
+    // win overlay (no shake here)
+    if (state === "win") {
       ctx.fillStyle = "rgba(5,5,12,0.72)";
       ctx.fillRect(0, 0, W, H);
       drawReplay();
@@ -637,7 +633,6 @@
     shipX: function () { return shipX; },
     state: function () { return state; },
     score: function () { return score; },
-    shields: function () { return shields; },
     invaderCount: function () { return aliveCount(); },
     boltsFired: function () { return boltTotal; },
     boltsLive: function () { return bolts.length; },

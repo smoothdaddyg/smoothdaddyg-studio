@@ -40,6 +40,10 @@ How we work on this site. Both human developers and their agents follow this.
   family, kids, dads, or "Our Story" anywhere on the site.
 - Mazes: no big open areas — every pathway must have walls on both sides —
   and walls are exactly one block thick (Miss Munch rule, 2026-10-10).
+- No game over from dying, ever. When the player dies, they get recreated
+  (respawn) and continue with progress intact (score, level, items kept).
+  Death should pause the game or break momentum briefly (~1-2s), but the
+  player never starts over and never sees a "game over" screen.
 
 ## Deploy checklist (manual zip path)
 - Build from a COPY of the source (never stamp the source tree): use

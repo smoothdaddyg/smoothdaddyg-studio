@@ -71,8 +71,8 @@
   function opposite(a, b) { return a.x === -b.x && a.y === -b.y; }
 
   /* ---------------- state ---------------- */
-  var state = "ready"; // ready | play | dying | clear | win | over
-  var level = 1, score = 0, shown = 0, shields = 3;
+  var state = "ready"; // ready | play | dying | clear | win
+  var level = 1, score = 0, shown = 0;
   var grid = [], dots = [], dotsLeft = 0, dotsEaten = 0;
   var player = null, ghosts = [];
   var frightT = 0, wakaHi = false;
@@ -376,11 +376,11 @@
   }
 
   function hurt() {
-    shields--;
+    // No game over, ever — she just gets recreated and keeps going.
+    // The "dying" pause breaks momentum, but dots/score/level are kept.
     audio.tone(520, 0.7, { type: "sawtooth", vol: 0.14, slideTo: 90 });
     boom(player.x, player.y, false);
-    if (shields <= 0) { state = "over"; stateT = 0; }
-    else { state = "dying"; stateT = 0; }
+    state = "dying"; stateT = 0;
   }
 
   function startWin() {
@@ -492,7 +492,8 @@
       }
     } else if (state === "dying") {
       stateT += dt;
-      if (stateT > 1.6) { resetPositions(); state = "ready"; }
+      // brief pause (breaks momentum), then she's recreated and play continues
+      if (stateT > 1.6) { resetPositions(); state = "play"; }
     } else if (state === "clear") {
       stateT += dt;
       flashT += dt;
@@ -509,8 +510,6 @@
         audio.tone(fanfare[fanfareIdx].f, 0.22, { type: "square", vol: 0.11 });
         fanfareIdx++;
       }
-    } else if (state === "over") {
-      stateT += dt;
     }
   }
 
@@ -832,14 +831,6 @@
       ctx.globalAlpha = p2;
       ctx.fillText("TAP TO PLAY AGAIN", W / 2, H * 0.52);
       ctx.globalAlpha = 1;
-    } else if (state === "over") {
-      ctx.fillStyle = "rgba(4,6,20,0.6)"; ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "16px 'Press Start 2P', monospace";
-      var p3 = 0.6 + 0.4 * Math.sin(performance.now() / 300);
-      ctx.globalAlpha = p3;
-      ctx.fillText("TAP TO PLAY AGAIN", W / 2, H * 0.5);
-      ctx.globalAlpha = 1;
     }
   }
 
@@ -850,16 +841,6 @@
     ctx.fillStyle = "rgba(6,8,28,0.62)";
     roundRect(10, 10, 108, 40, 12); ctx.fill();
     drawPixelNumber(ctx, Math.floor(shown), 64, 30, 4, "#ffffff", true);
-    // lives: tiny munch faces, top-right
-    for (var s = 0; s < 3; s++) {
-      var hx = W - 30 - s * 40, hy = 30;
-      if (s < shields) {
-        drawMiniMunch(hx, hy, 13);
-      } else {
-        ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(hx, hy, 13, 0, 6.29); ctx.stroke();
-      }
-    }
     // level pips, top-center
     var pw = LEVELS * 26;
     ctx.fillStyle = "rgba(6,8,28,0.62)";
@@ -910,12 +891,8 @@
     if (state === "ready") { state = "play"; }
     else if (state === "win" && stateT > 6) {
       if (window.SDGplays) SDGplays.played("missmunch");
-      score = 0; shown = 0; shields = 3; level = 1;
+      score = 0; shown = 0; level = 1;
       buildLevel(1); state = "ready"; parts = [];
-    } else if (state === "over" && stateT > 0.8) {
-      if (window.SDGplays) SDGplays.played("missmunch");
-      shields = 3; score = 0; shown = 0;
-      buildLevel(level); state = "ready"; parts = [];
     }
   }
 

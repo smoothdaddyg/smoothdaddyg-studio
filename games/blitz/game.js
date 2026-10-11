@@ -5,7 +5,8 @@
    scrolls by. Touch ABOVE the plane to climb, BELOW it to
    dive. Big buttons on BOTH sides (either hand): FIRE shoots
    the machine gun, BOMB drops a bomb. Blow up all 6 ground
-   bases to win. 3 shields. No reading required.
+   bases to win. Crash and you pop right back in — no game
+   over, ever. No reading required.
    ============================================================ */
 
 (function () {
@@ -26,15 +27,15 @@
   var BOMB_CD = 0.9;
   var GRAV = 900;
   var BLAST_R = 70;          // bomb blast radius
-  var MAX_SHIELDS = 3;
-  var INVULN = 1.6;
+  var INVULN = 1.6;          // grace period after respawn
+  var DOWN_TIME = 1.5;       // death pause before respawn
   var WORLD_SCREENS = 3;     // world width in screens, wraps around
   var LEVELS = 5;
   var WEATHERS = ["sunny", "cloud", "wind", "rain", "storm"];
   var ENEMY_COLORS = ["#455a64", "#607d8b", "#37474f", "#263238", "#15151f"];
 
   /* ---------------- state ---------------- */
-  var state = "play";        // play | levelup | win | over
+  var state = "play";        // play | levelup | win
   var level = 1, baseCount = 6, weather = "sunny";
   var scroll = 0, worldW = 0;
   var plane = { y: 0, vy: 0, tilt: 0 };
@@ -42,9 +43,9 @@
   var bullets = [], bombs = [], enemies = [], parts = [], clouds = [], rainDrops = [];
   var bases = [];
   var score = 0, shown = 0;
-  var shields = MAX_SHIELDS;
   var invuln = 0, fireCd = 0, bombCd = 0, puttT = 0, enemyT = 2;
-  var shake = 0, winT = 0, overT = 0, levelupT = 0, introT = 0;
+  var downT = 0;             // death pause: >0 means crashed, waiting to respawn
+  var shake = 0, winT = 0, levelupT = 0, introT = 0;
   var flash = 0, boltT = 3;  // lightning
   var ambient = null;        // looping weather sound bed
   var steerId = null, steerY = 0;
@@ -133,8 +134,8 @@
 
   function reset(full) {
     scroll = 0; bullets = []; bombs = []; enemies = []; parts = []; rainDrops = [];
-    shields = MAX_SHIELDS; invuln = 0; fireCd = 0; bombCd = 0;
-    shake = 0; winT = 0; overT = 0; levelupT = 0; flash = 0;
+    invuln = 0; downT = 0; fireCd = 0; bombCd = 0;
+    shake = 0; winT = 0; levelupT = 0; flash = 0;
     steerId = null; btnPointers = {}; fireHeld = false;
     plane.y = groundY - H * 0.35; plane.vy = 0; plane.tilt = 0;
     if (full) { score = 0; shown = 0; level = 1; }
@@ -146,7 +147,7 @@
     weather = WEATHERS[level - 1];  // sunny -> cloud -> wind -> rain -> storm
     stopAmbient();
     resetBases();
-    shields = MAX_SHIELDS; invuln = 0;
+    invuln = 0; downT = 0;
     rainDrops = []; flash = 0; boltT = 2 + Math.random() * 3;
     enemyT = 2;
     introT = 1.8;
@@ -197,7 +198,7 @@
   function onDown(e) {
     audio.unlock && audio.unlock();
     var x = e.clientX, y = e.clientY;
-    if (state === "win" || state === "over") { if (window.SDGplays) SDGplays.played("blitz"); reset(state === "win"); e.preventDefault(); return; }
+    if (state === "win") { if (window.SDGplays) SDGplays.played("blitz"); reset(true); e.preventDefault(); return; }
     if (state === "levelup") { e.preventDefault(); return; }
     var z = zoneAt(x, y);
     if (z) {
@@ -270,18 +271,13 @@
   function addScore(n) { score += n; }
 
   function hurt() {
-    if (invuln > 0 || state !== "play") return;
-    shields--; invuln = INVULN;
-    explode(planeX, plane.y, false);
+    if (invuln > 0 || downT > 0 || state !== "play") return;
+    // no game over, ever — a crash is a pause, then you pop back in
+    downT = DOWN_TIME;
+    explode(planeX, plane.y, true);
+    planeDownSound();
     audio.tone(220, 0.3, { type: "sawtooth", vol: 0.2, slideTo: 60 });
-    if (shields <= 0) {
-      state = "over"; overT = 0;
-      explode(planeX, plane.y, true);
-      audio.arp([392, 311, 262, 196], 0.16, "triangle", 0.16);
-    } else {
-      plane.y = Math.min(plane.y, groundAt(scroll + planeX) - 160);
-      plane.vy = 0;
-    }
+    shake = Math.max(shake, 10);
   }
 
   function planeDownSound() {
@@ -318,7 +314,7 @@
   /* ---------------- update ---------------- */
   function update(dt) {
     // engine putt-putt, very Sopwith
-    if (state === "play") {
+    if (state === "play" && downT <= 0) {
       puttT -= dt;
       if (puttT <= 0) {
         puttT = 0.13;
@@ -326,7 +322,18 @@
       }
     }
 
-    if (state === "play") {
+    if (state === "play" && downT > 0) {
+      // death pause: the world holds still while the smoke clears,
+      // then you pop back in at a safe altitude — score, level, bases kept
+      downT -= dt;
+      if (downT <= 0) {
+        plane.y = groundY - H * 0.35;
+        plane.vy = 0; plane.tilt = 0;
+        invuln = INVULN;
+      }
+    }
+
+    if (state === "play" && downT <= 0) {
       // steering: above plane = climb, below = dive
       var target = 0;
       if (steerId !== null) {
@@ -341,10 +348,10 @@
       if (plane.y < top) { plane.y = top; plane.vy = 0; }
       var dirtY = groundAt(scroll + planeX) - 26;
       if (plane.y > dirtY) {
-        // kissed the dirt — forgiving bounce, costs a shield
+        // kissed the dirt — a crash pauses you, then you pop back in
         plane.y = dirtY;
         hurt();
-        if (state === "play") { plane.vy = CLIMB * 0.7; }
+        if (state === "play" && downT <= 0) { plane.vy = CLIMB * 0.7; }
       }
 
       scroll = (scroll + SCROLL * dt) % worldW;
@@ -421,7 +428,6 @@
           explode(em.x, em.y, false);
           enemies.splice(m, 1);
           addScore(100);
-          planeDownSound();
           hurt();
         }
       }
@@ -455,7 +461,6 @@
     }
 
     if (state === "win") { winT += dt; if (shown < score) shown = Math.min(score, shown + 7); }
-    if (state === "over") { overT += dt; }
     if (state === "levelup") {
       levelupT += dt;
       if (shown < score) shown = Math.min(score, shown + 7);
@@ -767,8 +772,8 @@
       drawBiplane(enemies[e].x, enemies[e].y, Math.sin(enemies[e].wob) * 0.15, ENEMY_COLORS[level - 1], true);
     }
 
-    // player (blink while invulnerable)
-    if (!(invuln > 0 && Math.floor(performance.now() / 120) % 2 === 0)) {
+    // player (hidden while crashed, blink while invulnerable)
+    if (downT <= 0 && !(invuln > 0 && Math.floor(performance.now() / 120) % 2 === 0)) {
       drawBiplane(planeX, plane.y, plane.tilt, "#d32f2f", false);
     }
 
@@ -805,13 +810,7 @@
     }
 
     // HUD
-    // shields: little planes top-left
-    for (var s = 0; s < MAX_SHIELDS; s++) {
-      ctx.globalAlpha = s < shields ? 1 : 0.22;
-      drawMiniPlane(30 + s * 44, 34, s < shields ? "#d32f2f" : "#90a4ae");
-    }
-    ctx.globalAlpha = 1;
-    // level pips under the shields
+    // level pips, top-left
     for (var lp = 0; lp < LEVELS; lp++) {
       ctx.fillStyle = lp < level ? "#ffd740" : "rgba(255,255,255,0.25)";
       ctx.beginPath(); ctx.arc(30 + lp * 24, 62, 7, 0, 6.29); ctx.fill();
@@ -892,16 +891,15 @@
       ctx.textAlign = "center";
       ctx.fillText("LEVEL UP", W / 2, H * 0.54);
     }
-    if (state === "win" || state === "over") {
-      ctx.fillStyle = state === "win" ? "rgba(20,60,30,0.55)" : "rgba(40,10,10,0.55)";
+    if (state === "win") {
+      ctx.fillStyle = "rgba(20,60,30,0.55)";
       ctx.fillRect(0, 0, W, H);
       drawPixelNumber(ctx, shown, W / 2, H * 0.34, 8, "#ffd740", true);
       ctx.fillStyle = "#ffffff";
       ctx.font = Math.round(Math.min(22, W * 0.035)) + 'px "Press Start 2P", monospace';
       ctx.textAlign = "center";
-      var msg = state === "win" ? "ALL BASES DOWN!" : "TRY AGAIN";
-      ctx.fillText(msg, W / 2, H * 0.52);
-      if ((state === "win" ? winT : overT) > 0.8) {
+      ctx.fillText("ALL BASES DOWN!", W / 2, H * 0.52);
+      if (winT > 0.8) {
         ctx.globalAlpha = 0.6 + 0.4 * Math.sin(performance.now() / 350);
         ctx.font = Math.round(Math.min(14, W * 0.028)) + 'px "Press Start 2P", monospace';
         ctx.fillText("TAP TO FLY AGAIN", W / 2, H * 0.62);
@@ -909,15 +907,6 @@
       }
     }
 
-    ctx.restore();
-  }
-
-  function drawMiniPlane(x, y, color) {
-    ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = color;
-    ctx.fillRect(-14, -3, 28, 6);
-    ctx.fillRect(-4, -11, 14, 4);
-    ctx.fillRect(-16, -7, 6, 4);
     ctx.restore();
   }
 

@@ -21,8 +21,8 @@
   var TURN_RATE = 4.6;       // rad/sec the nose can swing
   var FIRE_CD = 0.22;
   var BULLET_SPEED = 640;
-  var MAX_SHIELDS = 3;
-  var INVULN = 1.6;
+  var INVULN = 1.6;          // grace period after respawn
+  var DOWN_TIME = 1.5;       // death pause before respawn
   var SPR = 2;               // global sprite scale — chunky and playful
   var ERAS = [
     { year: 1910, quota: 10, esp: 125, fire: 0,   wob: 0.6, body: "#8d6e63", dark: "#5d4037", bossHp: 6 },
@@ -34,7 +34,7 @@
   /* ---------------- state ---------------- */
   // The player lives in WORLD coordinates; the camera is glued to
   // the player, so on screen the plane never leaves the center.
-  var state = "play";        // play | clear | win | over
+  var state = "play";        // play | clear | win
   var level = 1;             // 1..4
   var player = { x: 0, y: 0, hd: -Math.PI / 2 };
   var camX = 0, camY = 0;    // world coords shown at screen center
@@ -42,9 +42,9 @@
   var boss = null;
   var killed = 0;
   var score = 0, shown = 0;
-  var shields = MAX_SHIELDS;
   var invuln = 0, fireCd = 0, spawnT = 1, starT = 5, bossMinionT = 0;
-  var shake = 0, clearT = 0, winT = 0, overT = 0, introT = 0, humT = 0;
+  var downT = 0;             // death pause: >0 means crashed, waiting to respawn
+  var shake = 0, clearT = 0, winT = 0, introT = 0, humT = 0;
   var dragId = null, dragX = 0, dragY = 0;
 
   function era() { return ERAS[level - 1]; }
@@ -100,7 +100,7 @@
   function startLevel() {
     bullets = []; ebullets = []; enemies = []; parts = []; pickups = [];
     boss = null; killed = 0;
-    shields = MAX_SHIELDS; invuln = 0;
+    invuln = 0; downT = 0;
     spawnT = 0.8; starT = 4; shake = 0; clearT = 0;
     player.x = 0; player.y = 0; player.hd = -Math.PI / 2;
     camX = 0; camY = 0;
@@ -137,7 +137,7 @@
   /* ---------------- input: drag anywhere to rotate ---------------- */
   function onDown(e) {
     if (audio.unlock) audio.unlock();
-    if (state === "win" || state === "over") { if (window.SDGplays) SDGplays.played("timewings"); reset(state === "win"); e.preventDefault(); return; }
+    if (state === "win") { if (window.SDGplays) SDGplays.played("timewings"); reset(true); e.preventDefault(); return; }
     if (state !== "play") { e.preventDefault(); return; }
     dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY;
     e.preventDefault();
@@ -189,15 +189,12 @@
   function addScore(n) { score += n; }
 
   function hurt() {
-    if (invuln > 0 || state !== "play") return;
-    shields--; invuln = INVULN;
-    explode(player.x, player.y, false);
+    if (invuln > 0 || downT > 0 || state !== "play") return;
+    // no game over, ever — a hit is a pause, then you pop back in
+    downT = DOWN_TIME;
+    explode(player.x, player.y, true);
     audio.tone(220, 0.3, { type: "sawtooth", vol: 0.2, slideTo: 60 });
-    if (shields <= 0) {
-      state = "over"; overT = 0;
-      explode(player.x, player.y, true);
-      audio.arp([392, 311, 262, 196], 0.16, "triangle", 0.16);
-    }
+    shake = Math.max(shake, 10);
   }
 
   /* ---------------- spawning (world coords, around the player) ---------------- */
@@ -248,7 +245,7 @@
   /* ---------------- update ---------------- */
   function update(dt) {
     // soft engine hum
-    if (state === "play") {
+    if (state === "play" && downT <= 0) {
       humT -= dt;
       if (humT <= 0) {
         humT = 0.16;
@@ -257,7 +254,14 @@
     }
     if (introT > 0) introT -= dt;
 
-    if (state === "play") {
+    if (state === "play" && downT > 0) {
+      // death pause: the world holds still while the smoke clears,
+      // then you pop back in — score, kills, era kept
+      downT -= dt;
+      if (downT <= 0) invuln = INVULN;
+    }
+
+    if (state === "play" && downT <= 0) {
       // steering: the nose swings toward the finger. The plane itself
       // never leaves the middle of the screen — the world moves instead.
       if (dragId !== null) {
@@ -442,7 +446,6 @@
       if (clearT > 2.4) { level++; startLevel(); }
     }
     if (state === "win") { winT += dt; if (shown < score) shown = Math.min(score, shown + 7); }
-    if (state === "over") { overT += dt; }
 
     // particles (world coords — they ride the camera like everything else)
     for (var p = 0; p < parts.length; p++) {
@@ -643,8 +646,8 @@
     // boss
     if (boss) drawBoss(sx(boss.x), sy(boss.y), boss.wob);
 
-    // THE player — dead center, always
-    if (!(invuln > 0 && Math.floor(performance.now() / 120) % 2 === 0)) {
+    // THE player — dead center, always (hidden while crashed)
+    if (downT <= 0 && !(invuln > 0 && Math.floor(performance.now() / 120) % 2 === 0)) {
       drawPlane(W / 2, H / 2, player.hd, "#d32f2f", "#7f0000", SPR);
       // little steering ribbon toward the finger
       if (dragId !== null && state === "play") {
@@ -671,11 +674,6 @@
     ctx.restore();
 
     // HUD (screen space)
-    for (var s = 0; s < MAX_SHIELDS; s++) {
-      ctx.globalAlpha = s < shields ? 1 : 0.22;
-      drawMiniPlane(30 + s * 44, 34, s < shields ? "#d32f2f" : "#90a4ae");
-    }
-    ctx.globalAlpha = 1;
     for (var lp = 0; lp < ERAS.length; lp++) {
       ctx.fillStyle = lp < level ? "#ffd740" : "rgba(255,255,255,0.25)";
       ctx.beginPath(); ctx.arc(30 + lp * 24, 62, 7, 0, 6.29); ctx.fill();
@@ -721,31 +719,21 @@
       ctx.textAlign = "center";
       ctx.fillText("ERA CLEAR", W / 2, H * 0.54);
     }
-    if (state === "win" || state === "over") {
-      ctx.fillStyle = state === "win" ? "rgba(20,60,30,0.55)" : "rgba(40,10,10,0.55)";
+    if (state === "win") {
+      ctx.fillStyle = "rgba(20,60,30,0.55)";
       ctx.fillRect(0, 0, W, H);
       drawPixelNumber(ctx, shown, W / 2, H * 0.34, 8, "#ffd740", true);
       ctx.fillStyle = "#ffffff";
       ctx.font = Math.round(Math.min(22, W * 0.035)) + 'px "Press Start 2P", monospace';
       ctx.textAlign = "center";
-      var msg = state === "win" ? "TIME MASTER!" : "TRY AGAIN";
-      ctx.fillText(msg, W / 2, H * 0.52);
-      if ((state === "win" ? winT : overT) > 0.8) {
+      ctx.fillText("TIME MASTER!", W / 2, H * 0.52);
+      if (winT > 0.8) {
         ctx.globalAlpha = 0.6 + 0.4 * Math.sin(performance.now() / 350);
         ctx.font = Math.round(Math.min(14, W * 0.028)) + 'px "Press Start 2P", monospace';
         ctx.fillText("TAP TO FLY AGAIN", W / 2, H * 0.62);
         ctx.globalAlpha = 1;
       }
     }
-  }
-
-  function drawMiniPlane(x, y, color) {
-    ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = color;
-    ctx.fillRect(-14, -3, 28, 6);
-    ctx.fillRect(-4, -11, 14, 4);
-    ctx.fillRect(-16, -7, 6, 4);
-    ctx.restore();
   }
 
   /* ---------------- main loop ---------------- */
