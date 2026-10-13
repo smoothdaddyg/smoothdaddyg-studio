@@ -5,8 +5,11 @@
    streams top -> bottom. Nobody stops moving — ever.
    ONE interaction: tap anywhere to throw the ball there.
    Lead your teammates, dodge interceptions, tap the top basket
-   to shoot. First to 10 wins. No timers, no fouls, no losing
-   on a mistake — just pure passing fun.
+   to shoot. First to 10 wins.
+   Red defenders are fast and steal by getting CLOSE — keep the ball
+   moving. Hold it more than 2 seconds and the shot clock takes it
+   (watch the ring shrink, listen for the beeps). No fouls, no
+   losing on a mistake — just pure passing fun.
    ============================================================ */
 
 (function () {
@@ -18,8 +21,13 @@
     RED_COUNT: 6,         // visible red players
     PLAYER_R: 18,         // player body radius (px)
     CATCH_R: 30,          // catch/pickup radius — a touch bigger than the body
-    SPEED_MIN: 40,        // player speed px/s — wide range, some much faster
+    SPEED_MIN: 40,        // blue speed px/s — wide range, some much faster
     SPEED_MAX: 140,
+    RED_SPEED_MIN: 40,    // reds span the same range as blue: joggers to sprinters
+    RED_SPEED_MAX: 140,
+    STEAL_RADIUS: 64,     // a red this close (px) to the ball holder steals it
+    SHOT_CLOCK: 2.0,      // max seconds the ball holder may hold the ball
+    SHOT_WARN: 0.5,       // final seconds of the clock: beeps + urgent ring
     DRIFT: 26,            // max horizontal drift px/s
     BALL_MUL: 2.5,        // ball speed = BALL_MUL x average player speed
     WIN_SCORE: 10,
@@ -49,10 +57,12 @@
   let rings = [];              // expanding rings {x,y,r,t,life,hue}
 
   // ball modes: 'none' | 'carried' | 'flying'
+  // possT = shot-clock time the current holder has had the ball
   let ball = { mode: "none", x: 0, y: 0, carrier: null,
                tx: 0, ty: 0, dx: 0, dy: 0, dist: 0,
                shotBy: null, shotTarget: null,
-               thrower: null, throwerT: 0, trail: [] };
+               thrower: null, throwerT: 0, trail: [],
+               possT: 0, beepT: 0 };
 
   let basketTop = { x: 0, y: 0 };
   let basketBottom = { x: 0, y: 0 };
@@ -118,7 +128,10 @@
 
   /* ---------------- players ---------------- */
   function spawnPlayer(team, withBall) {
-    const speed = rnd(CFG.SPEED_MIN, CFG.SPEED_MAX);
+    // reds span the same speed range as blue: slow joggers to real sprinters
+    const lo = team === "red" ? CFG.RED_SPEED_MIN : CFG.SPEED_MIN;
+    const hi = team === "red" ? CFG.RED_SPEED_MAX : CFG.SPEED_MAX;
+    const speed = rnd(lo, hi);
     const p = {
       team: team,
       x: rnd(50, Math.max(51, W - 50)),
@@ -135,6 +148,7 @@
       ball.carrier = p;
       ball.x = p.x; ball.y = p.y;
       ball.shotBy = null; ball.shotTarget = null;
+      ball.possT = 0; ball.beepT = 0; // fresh shot clock for the new holder
     }
     return p;
   }
@@ -157,6 +171,7 @@
     spawnPlayer(team, true);
     ball.shotBy = null; ball.shotTarget = null;
     ball.thrower = null; ball.throwerT = 0;
+    ball.possT = 0; ball.beepT = 0; // fresh shot clock
   }
 
   /* ---------------- throwing & catching ---------------- */
@@ -186,8 +201,9 @@
     p.hasBall = true;
     ball.x = p.x; ball.y = p.y;
     ball.trail = [];
-    // a catch kills any shot in progress
+    // a catch kills any shot in progress, and gives the new holder a fresh clock
     ball.shotBy = null; ball.shotTarget = null;
+    ball.possT = 0; ball.beepT = 0;
     if (intercepted) {
       audio.tone(180, 0.25, { type: "sawtooth", vol: 0.12, slideTo: 90 });
       burst(p.x, p.y, 0, 22, 300);
@@ -212,6 +228,37 @@
   function updateBall(dt) {
     if (ball.mode === "carried") {
       if (ball.carrier) { ball.x = ball.carrier.x; ball.y = ball.carrier.y; }
+      if (state === "play" && ball.carrier && ball.carrier.team === "blue") {
+        // RED PROXIMITY STEAL — a red just has to get close, not touch.
+        // Steal = instant 2 points for red, ball resets to blue at the bottom.
+        for (const p of players) {
+          if (p.team !== "red") continue;
+          if (dist(p.x, p.y, ball.carrier.x, ball.carrier.y) < CFG.STEAL_RADIUS) {
+            burst(p.x, p.y, 0, 16, 240);
+            audio.tone(180, 0.25, { type: "sawtooth", vol: 0.12, slideTo: 90 });
+            scoreBasket("red");
+            return;
+          }
+        }
+        // SHOT CLOCK — hold the ball too long and it's a turnover.
+        // No points for red on a violation; fresh blue player from the bottom.
+        ball.possT += dt;
+        const warnAt = CFG.SHOT_CLOCK - CFG.SHOT_WARN;
+        if (ball.possT >= warnAt) {
+          ball.beepT += dt;
+          if (ball.beepT >= 0.15) {
+            ball.beepT = 0;
+            const urgency = clamp((ball.possT - warnAt) / CFG.SHOT_WARN, 0, 1);
+            audio.tone(700 + 400 * urgency, 0.07, { type: "square", vol: 0.10 });
+          }
+        }
+        if (ball.possT >= CFG.SHOT_CLOCK) {
+          burst(ball.x, ball.y, 45, 14, 200);
+          audio.tone(320, 0.25, { type: "square", vol: 0.10, slideTo: 140 });
+          resetBallToEdge("blue");
+          return;
+        }
+      }
       return;
     }
     if (ball.mode === "flying") {
@@ -313,7 +360,8 @@
     players = []; parts = []; rings = [];
     ball = { mode: "none", x: 0, y: 0, carrier: null,
              tx: 0, ty: 0, dx: 0, dy: 0, dist: 0,
-             shotBy: null, shotTarget: null, thrower: null, throwerT: 0, trail: [] };
+             shotBy: null, shotTarget: null, thrower: null, throwerT: 0, trail: [],
+             possT: 0, beepT: 0 };
     for (let i = 0; i < CFG.BLUE_COUNT; i++) {
       const p = spawnPlayer("blue", false);
       p.y = rnd(H * 0.15, H + CFG.SPAWN_MARGIN); // scatter them up the court
@@ -512,6 +560,21 @@
     ctx.beginPath(); ctx.moveTo(x, y + bob - r); ctx.lineTo(x, y + bob + r); ctx.stroke();
   }
 
+  /* Shot-clock visual: a ring around the ball holder that shrinks as the
+     2-second clock drains, turning red in the final warning beat.
+     No numbers anywhere — just the ring, plus the beeps. */
+  function drawShotClock() {
+    if (state !== "play" || ball.mode !== "carried" || !ball.carrier) return;
+    if (ball.carrier.team !== "blue") return;
+    const c = ball.carrier;
+    const frac = clamp(ball.possT / CFG.SHOT_CLOCK, 0, 1);
+    const r = CFG.PLAYER_R + 34 - frac * 28; // 52 -> 24 px
+    const urgent = ball.possT >= CFG.SHOT_CLOCK - CFG.SHOT_WARN;
+    ctx.strokeStyle = urgent ? "rgba(255,90,90,0.95)" : "rgba(255,255,255,0.55)";
+    ctx.lineWidth = urgent ? 5 : 3;
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 6.2832); ctx.stroke();
+  }
+
   function drawScoreboard() {
     // blue score left, red score right — numbers only, no reading needed
     ctx.fillStyle = "rgba(4,8,18,0.55)";
@@ -621,6 +684,7 @@
     drawBasket(basketBottom, true);
     for (const p of players) drawPlayer(p);
     drawBall();
+    drawShotClock();
     drawParts();
     drawScoreboard();
     if (state === "title") drawTitle();
@@ -660,7 +724,8 @@
   }
   requestAnimationFrame(frame);
 
-  /* Read-only test hook. */
+  /* Test hook. `debug` exposes live objects so tests can position players
+     and inspect the ball — test-only, never used by the game itself. */
   window.__frenzyTest = {
     get state() { return state; },
     get blueScore() { return blueScore; },
@@ -668,6 +733,10 @@
     get players() { return players.length; },
     get ballMode() { return ball.mode; },
     get cfg() { return CFG; },
+    debug: {
+      players: function () { return players; },
+      ball: function () { return ball; },
+    },
     tap: function (x, y) { onTap(x, y); },
     start: function () { startGame(); },
     step: function (dt) { tick(dt || 0.016); },

@@ -1,5 +1,8 @@
 /* Node test for Passing Frenzy (window.__frenzyTest).
-   Verifies: game starts, tap-to-throw works, ball modes, scoring, win at 10, restart.
+   Verifies: game starts, tap-to-throw works, ball modes, scoring, win at 10,
+   restart, red sprinters, proximity steals (in/out of STEAL_RADIUS),
+   steal scoring + bottom reset, shot-clock violation (no red points, bottom
+   reset), beep warnings in the final 0.5s, and pass resetting the clock.
    Run: node tools/tests/passingfrenzy.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -20,6 +23,8 @@ const ctxStub = new Proxy({}, {
 });
 const mkCanvas = () => ({ getContext: () => ctxStub, addEventListener: noop, style: {}, width: 0, height: 0 });
 
+// counting audio stub so tests can verify the shot-clock beeps
+let toneCalls = 0;
 const sandbox = {
   window: { innerWidth: 400, innerHeight: 700, devicePixelRatio: 1, addEventListener: noop, SDGplays: { played: noop } },
   document: {
@@ -30,7 +35,7 @@ const sandbox = {
   },
   performance: { now: () => 1000 },
   requestAnimationFrame: noop,
-  makeAudio: () => ({ tone: noop, noise: noop, arp: noop, toggleMute: () => false, unlock: noop, state: () => "running" }),
+  makeAudio: () => ({ tone: () => { toneCalls++; }, noise: noop, arp: noop, toggleMute: () => false, unlock: noop, state: () => "running" }),
   drawPixelNumber: noop,
   Math, JSON, Object, Array,
 };
@@ -49,6 +54,18 @@ function ok(name, cond) {
   else { fail++; console.log("FAIL", name); }
 }
 
+// ---- test helpers (position players deterministically) ----
+function allPlayers() { return F.debug.players(); }
+function reds() { return allPlayers().filter((p) => p.team === "red"); }
+function blues() { return allPlayers().filter((p) => p.team === "blue"); }
+// park reds off-screen and freeze them: no accidental steals/interceptions
+function parkReds() {
+  for (const p of reds()) { p.x = 30; p.y = -400; p.vx = 0; p.vy = 0; }
+}
+function freezeAll() {
+  for (const p of allPlayers()) { p.vx = 0; p.vy = 0; }
+}
+
 // game starts in title, players spawn
 eq("initial state is title", F.state, "title");
 ok("players exist", F.players >= 10);
@@ -59,12 +76,12 @@ eq("state is play after start", F.state, "play");
 ok("blue has ball or ball in play", ["carried", "flying", "loose"].includes(F.ballMode));
 
 // tap to throw (if blue has it, ball should fly)
-const modeBefore = F.ballMode;
 F.tap(200, 100);
-const modeAfter = F.ballMode;
 ok("tap changes ball mode or keeps play", F.state === "play");
 
 // step the simulation — players keep moving, no crashes
+// (reds parked off-screen so the unattended sim can't steal/intercept)
+parkReds();
 for (let i = 0; i < 120; i++) F.step(0.016);
 ok("players still exist after 2s", F.players >= 10);
 eq("state still play", F.state, "play");
@@ -72,6 +89,7 @@ eq("state still play", F.state, "play");
 // scoring: force blue to 8, then score to reach 10 -> win
 // (forceScore sets the score then triggers a basket which adds 2)
 F.start();
+parkReds();
 F.forceScore("blue", 6); // 6 + 2 = 8
 eq("blue at 8", F.blueScore, 8);
 F.step(2.0); // let celebrate finish -> back to play
@@ -90,6 +108,7 @@ eq("scores reset", F.blueScore + F.redScore, 0);
 
 // red can win too
 F.start();
+parkReds();
 F.forceScore("red", 8); // 8 + 2 = 10
 eq("red wins at 10", F.redScore, 10);
 F.step(2.0);
@@ -97,6 +116,108 @@ eq("state is win (red)", F.state, "win");
 
 // config sanity
 ok("win score is 10", F.cfg.WIN_SCORE === 10);
+eq("steal radius is 64", F.cfg.STEAL_RADIUS, 64);
+eq("shot clock is 2.0s", F.cfg.SHOT_CLOCK, 2.0);
+eq("shot warn window is 0.5s", F.cfg.SHOT_WARN, 0.5);
+eq("red speed min matches blue (40)", F.cfg.RED_SPEED_MIN, 40);
+eq("red speed max matches blue (140)", F.cfg.RED_SPEED_MAX, 140);
+
+// red sprinters: all red speeds in range, and fast ones actually spawn
+let maxRed = 0, allInRange = true;
+for (let r = 0; r < 15; r++) {
+  F.start();
+  for (const p of reds()) {
+    if (p.speed < 40 || p.speed > 140) allInRange = false;
+    if (p.speed > maxRed) maxRed = p.speed;
+  }
+}
+ok("all red speeds within 40-140", allInRange);
+ok("red sprinters exist (some red faster than 120)", maxRed > 120);
+
+// PROXIMITY STEAL: red inside STEAL_RADIUS steals (no touch needed)
+F.start();
+parkReds();
+freezeAll();
+let carrier = F.debug.ball().carrier;
+ok("ball starts carried by blue", carrier && carrier.team === "blue");
+const thief = reds()[0];
+thief.x = carrier.x; thief.y = carrier.y; // distance 0 < 64
+const rsBefore = F.redScore;
+F.step(0.016);
+eq("proximity steal: red +2", F.redScore, rsBefore + 2);
+eq("proximity steal triggers celebrate", F.state, "celebrate");
+
+// after the steal: ball resets to a fresh blue player coming up from the bottom
+let guard = 0;
+while (F.state !== "play" && guard++ < 40) F.step(0.1);
+eq("back to play after steal", F.state, "play");
+eq("ball with blue after steal reset", F.ballMode, "carried");
+const postSteal = F.debug.ball().carrier;
+ok("reset carrier is blue", postSteal && postSteal.team === "blue");
+ok("reset carrier enters from the bottom", postSteal && postSteal.y > 650);
+
+// NO STEAL just outside the radius
+F.start();
+parkReds();
+freezeAll();
+carrier = F.debug.ball().carrier;
+const lurker = reds()[0];
+lurker.x = carrier.x + F.cfg.STEAL_RADIUS + 25;
+lurker.y = carrier.y;
+const rsBefore2 = F.redScore;
+for (let i = 0; i < 5; i++) F.step(0.016);
+eq("no steal outside radius", F.redScore, rsBefore2);
+eq("ball still carried by blue", F.ballMode, "carried");
+ok("carrier still has it", F.debug.ball().carrier === carrier);
+
+// SHOT CLOCK: holding too long = turnover, NO red points, blue reset
+F.start();
+parkReds();
+freezeAll();
+const holder = F.debug.ball().carrier;
+for (let i = 0; i < 140; i++) F.step(0.016); // 2.24s > 2.0s clock
+eq("no red points on shot-clock violation", F.redScore, 0);
+eq("no blue points on shot-clock violation", F.blueScore, 0);
+eq("ball back with blue after violation", F.ballMode, "carried");
+const postClock = F.debug.ball().carrier;
+ok("holder changed after violation", postClock && postClock !== holder);
+ok("fresh clock after violation reset", F.debug.ball().possT < 1.0);
+eq("still playing after violation (no game over)", F.state, "play");
+
+// BEEP WARNINGS: silent early, beeping in the final 0.5s
+F.start();
+parkReds();
+freezeAll();
+toneCalls = 0;
+for (let i = 0; i < 90; i++) F.step(0.016); // 1.44s — before the warn window
+eq("no beeps before final 0.5s", toneCalls, 0);
+for (let i = 0; i < 40; i++) F.step(0.016); // through the warn window + expiry
+ok("beeps fire during final 0.5s", toneCalls >= 2);
+
+// PASS RESETS THE CLOCK: hold 1.2s, complete a pass, new holder gets 0
+F.start();
+parkReds();
+freezeAll();
+const passer = F.debug.ball().carrier;
+passer.x = 100; passer.y = 500;
+const mate = blues().find((p) => p !== passer);
+mate.x = 250; mate.y = 500; // far from the top basket (200,108): a pass, not a shot
+for (const p of allPlayers()) {
+  if (p === passer || p === mate) continue;
+  p.x = 30; p.y = 30; // everyone else out of the pass lane
+}
+for (let i = 0; i < 75; i++) F.step(0.016); // hold 1.2s
+ok("clock advanced while holding", F.debug.ball().possT > 1.0);
+F.tap(250, 500); // pass to the mate
+eq("ball flying after pass", F.ballMode, "flying");
+let caught = false;
+for (let i = 0; i < 60 && !caught; i++) {
+  F.step(0.016);
+  if (F.ballMode === "carried") caught = true;
+}
+ok("teammate caught the pass", caught);
+ok("clock reset on catch", F.debug.ball().possT < 0.3);
+ok("new holder is the mate", F.debug.ball().carrier === mate);
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
