@@ -116,8 +116,8 @@ eq("state is win (red)", F.state, "win");
 
 // config sanity
 ok("win score is 10", F.cfg.WIN_SCORE === 10);
-eq("steal radius is 64", F.cfg.STEAL_RADIUS, 64);
-eq("shot clock is 2.0s", F.cfg.SHOT_CLOCK, 2.0);
+eq("steal radius is 48", F.cfg.STEAL_RADIUS, 48);
+eq("shot clock is 4.0s", F.cfg.SHOT_CLOCK, 4.0);
 eq("shot warn window is 0.5s", F.cfg.SHOT_WARN, 0.5);
 eq("red speed min matches blue (40)", F.cfg.RED_SPEED_MIN, 40);
 eq("red speed max matches blue (140)", F.cfg.RED_SPEED_MAX, 140);
@@ -141,7 +141,7 @@ freezeAll();
 let carrier = F.debug.ball().carrier;
 ok("ball starts carried by blue", carrier && carrier.team === "blue");
 const thief = reds()[0];
-thief.x = carrier.x; thief.y = carrier.y; // distance 0 < 64
+thief.x = carrier.x; thief.y = carrier.y; // distance 0 < 48
 const rsBefore = F.redScore;
 F.step(0.016);
 eq("proximity steal: red +2", F.redScore, rsBefore + 2);
@@ -175,7 +175,7 @@ F.start();
 parkReds();
 freezeAll();
 const holder = F.debug.ball().carrier;
-for (let i = 0; i < 140; i++) F.step(0.016); // 2.24s > 2.0s clock
+for (let i = 0; i < 260; i++) F.step(0.016); // 4.16s > 4.0s clock
 eq("no red points on shot-clock violation", F.redScore, 0);
 eq("no blue points on shot-clock violation", F.blueScore, 0);
 eq("ball back with blue after violation", F.ballMode, "carried");
@@ -189,9 +189,9 @@ F.start();
 parkReds();
 freezeAll();
 toneCalls = 0;
-for (let i = 0; i < 90; i++) F.step(0.016); // 1.44s — before the warn window
+for (let i = 0; i < 180; i++) F.step(0.016); // 2.88s — before the warn window (warn starts at 3.5s)
 eq("no beeps before final 0.5s", toneCalls, 0);
-for (let i = 0; i < 40; i++) F.step(0.016); // through the warn window + expiry
+for (let i = 0; i < 80; i++) F.step(0.016); // through the warn window + expiry (4.16s total)
 ok("beeps fire during final 0.5s", toneCalls >= 2);
 
 // PASS RESETS THE CLOCK: hold 1.2s, complete a pass, new holder gets 0

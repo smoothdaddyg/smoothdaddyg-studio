@@ -25,8 +25,8 @@
     SPEED_MAX: 140,
     RED_SPEED_MIN: 40,    // reds span the same range as blue: joggers to sprinters
     RED_SPEED_MAX: 140,
-    STEAL_RADIUS: 64,     // a red this close (px) to the ball holder steals it
-    SHOT_CLOCK: 2.0,      // max seconds the ball holder may hold the ball
+    STEAL_RADIUS: 48,     // a red this close (px) to the ball holder steals it
+    SHOT_CLOCK: 4.0,      // max seconds the ball holder may hold the ball
     SHOT_WARN: 0.5,       // final seconds of the clock: beeps + urgent ring
     DRIFT: 26,            // max horizontal drift px/s
     BALL_MUL: 2.5,        // ball speed = BALL_MUL x average player speed
