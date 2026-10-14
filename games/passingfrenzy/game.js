@@ -1,13 +1,13 @@
 /* ============================================================
    PASSING FRENZY — SmoothDaddyG
    A fast, joyful basketball-passing arcade game.
-   Blue team (you) streams bottom -> top. Red team (computer)
-   streams top -> bottom. Nobody stops moving — ever.
+   Both teams stream BOTH ways — some players run up the court,
+   some run down. Nobody stops moving — ever.
    ONE interaction: tap anywhere to throw the ball there.
    Lead your teammates, dodge interceptions, tap the top basket
    to shoot. First to 10 wins.
    Red defenders are fast and steal by getting CLOSE — keep the ball
-   moving. Hold it more than 2 seconds and the shot clock takes it
+   moving. Hold it more than 4 seconds and the shot clock takes it
    (watch the ring shrink, listen for the beeps). No fouls, no
    losing on a mistake — just pure passing fun.
    ============================================================ */
@@ -127,17 +127,23 @@
   window.addEventListener("resize", resize);
 
   /* ---------------- players ---------------- */
-  function spawnPlayer(team, withBall) {
+  function spawnPlayer(team, withBall, forceDir) {
     // reds span the same speed range as blue: slow joggers to real sprinters
     const lo = team === "red" ? CFG.RED_SPEED_MIN : CFG.SPEED_MIN;
     const hi = team === "red" ? CFG.RED_SPEED_MAX : CFG.SPEED_MAX;
     const speed = rnd(lo, hi);
+    // both teams stream BOTH ways: each player gets a randomized vertical
+    // direction (dir -1 = up, +1 = down) and enters from the edge behind
+    // them. forceDir (-1 | 1) overrides the coin flip when the caller needs
+    // a specific direction (e.g. blue always comes UP from the bottom).
+    const dir = forceDir !== undefined ? forceDir : (Math.random() < 0.5 ? -1 : 1);
     const p = {
       team: team,
       x: rnd(50, Math.max(51, W - 50)),
-      y: team === "blue" ? H + CFG.SPAWN_MARGIN : -CFG.SPAWN_MARGIN,
+      y: dir < 0 ? H + CFG.SPAWN_MARGIN : -CFG.SPAWN_MARGIN,
       vx: rnd(-CFG.DRIFT, CFG.DRIFT),
-      vy: team === "blue" ? -speed : speed,
+      vy: dir * speed,
+      dir: dir,
       speed: speed,
       phase: Math.random() * 6.283,
       hasBall: !!withBall,
@@ -162,13 +168,14 @@
     if (nr < CFG.RED_COUNT) spawnPlayer("red", false);
   }
 
-  /* Give `team` the ball at their own starting edge (after a basket or a
-     carrier running off the edge). Spawns a fresh player holding it. */
+  /* Give `team` the ball with a fresh player. Blue always enters from the
+     bottom moving up ("coming up"); red's direction is a coin flip.
+     Used after baskets, steals, violations, and off-screen turnovers. */
   function resetBallToEdge(team) {
     // clear any old carrier flag
     for (const p of players) p.hasBall = false;
     ball.trail = [];
-    spawnPlayer(team, true);
+    spawnPlayer(team, true, team === "blue" ? -1 : undefined);
     ball.shotBy = null; ball.shotTarget = null;
     ball.thrower = null; ball.throwerT = 0;
     ball.possT = 0; ball.beepT = 0; // fresh shot clock
@@ -364,11 +371,11 @@
              possT: 0, beepT: 0 };
     for (let i = 0; i < CFG.BLUE_COUNT; i++) {
       const p = spawnPlayer("blue", false);
-      p.y = rnd(H * 0.15, H + CFG.SPAWN_MARGIN); // scatter them up the court
+      p.y = rnd(-CFG.SPAWN_MARGIN, H + CFG.SPAWN_MARGIN); // scatter them up the court
     }
     for (let i = 0; i < CFG.RED_COUNT; i++) {
       const p = spawnPlayer("red", false);
-      p.y = rnd(-CFG.SPAWN_MARGIN, H * 0.85);
+      p.y = rnd(-CFG.SPAWN_MARGIN, H + CFG.SPAWN_MARGIN);
     }
     resetBallToEdge("blue"); // human starts with the ball
     state = "play";
@@ -391,9 +398,10 @@
       p.vx = clamp(p.vx, -CFG.DRIFT, CFG.DRIFT);
       if (p.x < 30) { p.x = 30; p.vx = Math.abs(p.vx); }
       if (p.x > W - 30) { p.x = W - 30; p.vx = -Math.abs(p.vx); }
-      // exit the far edge
-      if ((p.team === "blue" && p.y < -CFG.SPAWN_MARGIN) ||
-          (p.team === "red" && p.y > H + CFG.SPAWN_MARGIN)) {
+      // exit the far edge — direction-aware now that both teams go both ways
+      const exited = (p.vy < 0 && p.y < -CFG.SPAWN_MARGIN) ||
+                     (p.vy > 0 && p.y > H + CFG.SPAWN_MARGIN);
+      if (exited) {
         if (p.hasBall && (state === "play")) {
           // carrier ran off with it — turnover to the other team at THEIR edge
           const toTeam = p.team === "blue" ? "red" : "blue";
@@ -520,8 +528,8 @@
     // face
     ctx.fillStyle = "#ffd9b3";
     ctx.beginPath(); ctx.arc(x, y - 4, r * 0.52, 0, 6.2832); ctx.fill();
-    // eyes look toward travel direction
-    const ey = p.team === "blue" ? -2 : 2;
+    // eyes look toward travel direction (up or down — both teams go both ways)
+    const ey = p.dir < 0 ? -2 : 2;
     ctx.fillStyle = "#20242e";
     ctx.beginPath(); ctx.arc(x - 5, y - 4 + ey, 2.6, 0, 6.2832); ctx.fill();
     ctx.beginPath(); ctx.arc(x + 5, y - 4 + ey, 2.6, 0, 6.2832); ctx.fill();
@@ -561,7 +569,7 @@
   }
 
   /* Shot-clock visual: a ring around the ball holder that shrinks as the
-     2-second clock drains, turning red in the final warning beat.
+     4-second clock drains, turning red in the final warning beat.
      No numbers anywhere — just the ring, plus the beeps. */
   function drawShotClock() {
     if (state !== "play" || ball.mode !== "carried" || !ball.carrier) return;

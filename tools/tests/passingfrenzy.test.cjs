@@ -2,7 +2,9 @@
    Verifies: game starts, tap-to-throw works, ball modes, scoring, win at 10,
    restart, red sprinters, proximity steals (in/out of STEAL_RADIUS),
    steal scoring + bottom reset, shot-clock violation (no red points, bottom
-   reset), beep warnings in the final 0.5s, and pass resetting the clock.
+   reset), beep warnings in the final 0.5s, pass resetting the clock,
+   both teams streaming BOTH ways (up/down mix), off-screen recycling,
+   and carrier-runoff turnovers.
    Run: node tools/tests/passingfrenzy.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -155,6 +157,7 @@ eq("ball with blue after steal reset", F.ballMode, "carried");
 const postSteal = F.debug.ball().carrier;
 ok("reset carrier is blue", postSteal && postSteal.team === "blue");
 ok("reset carrier enters from the bottom", postSteal && postSteal.y > 650);
+ok("reset carrier moves upward (coming up)", postSteal && postSteal.vy < 0);
 
 // NO STEAL just outside the radius
 F.start();
@@ -182,6 +185,7 @@ eq("ball back with blue after violation", F.ballMode, "carried");
 const postClock = F.debug.ball().carrier;
 ok("holder changed after violation", postClock && postClock !== holder);
 ok("fresh clock after violation reset", F.debug.ball().possT < 1.0);
+ok("violation reset carrier moves upward (coming up)", postClock && postClock.vy < 0);
 eq("still playing after violation (no game over)", F.state, "play");
 
 // BEEP WARNINGS: silent early, beeping in the final 0.5s
@@ -218,6 +222,57 @@ for (let i = 0; i < 60 && !caught; i++) {
 ok("teammate caught the pass", caught);
 ok("clock reset on catch", F.debug.ball().possT < 0.3);
 ok("new holder is the mate", F.debug.ball().carrier === mate);
+
+// BOTH DIRECTIONS: each team spawns a mix of up-movers and down-movers,
+// dir is always ±1, and vy's sign always matches dir
+let blueUp = 0, blueDown = 0, redUp = 0, redDown = 0, dirOk = true;
+for (let r = 0; r < 8; r++) {
+  F.start();
+  for (const p of allPlayers()) {
+    if (p.dir !== 1 && p.dir !== -1) dirOk = false;
+    if ((p.dir < 0) !== (p.vy < 0)) dirOk = false; // vy sign matches dir
+    if (Math.abs(p.vy) !== p.speed) dirOk = false; // |vy| == speed
+    if (p.team === "blue") { if (p.vy < 0) blueUp++; else blueDown++; }
+    else { if (p.vy < 0) redUp++; else redDown++; }
+  }
+}
+ok("player dir is ±1, vy sign matches dir, |vy| == speed", dirOk);
+ok("blue spawns both up-movers and down-movers", blueUp > 0 && blueDown > 0);
+ok("red spawns both up-movers and down-movers", redUp > 0 && redDown > 0);
+
+// OFF-SCREEN RECYCLING (bottom): a down-moving blue that exits the bottom
+// edge is removed and the roster is replenished with a fresh player
+F.start();
+parkReds();
+const wanderer = blues().find((p) => p !== F.debug.ball().carrier);
+wanderer.vx = 0; wanderer.vy = 100; wanderer.y = 690; // heading for the bottom edge
+const wandererRef = wanderer;
+for (let i = 0; i < 30; i++) F.step(0.016); // 0.48s * 100px/s = 48px > 46px to the edge
+ok("bottom-exiting player is removed", !F.debug.players().includes(wandererRef));
+ok("roster replenished after bottom exit", F.players >= 12);
+eq("still playing after bottom recycle", F.state, "play");
+
+// OFF-SCREEN RECYCLING (top): an up-moving red that exits the top edge
+// is removed and the roster is replenished
+F.start();
+parkReds();
+const riser = reds()[0];
+riser.vx = 0; riser.vy = -100; riser.y = 10; // heading for the top edge
+const riserRef = riser;
+for (let i = 0; i < 30; i++) F.step(0.016); // 48px up from y=10 -> -38 < -36 exits
+ok("top-exiting player is removed", !F.debug.players().includes(riserRef));
+ok("roster replenished after top exit", F.players >= 12);
+eq("still playing after top recycle", F.state, "play");
+
+// CARRIER RUNOFF: a blue carrier that runs off the bottom turns it over to red
+F.start();
+parkReds();
+const runaway = F.debug.ball().carrier;
+runaway.vx = 0; runaway.vy = 120; runaway.y = 690; // blue carrier heading down, near bottom
+for (let i = 0; i < 30; i++) F.step(0.016); // 57.6px > 46px to the edge
+const newCarrier = F.debug.ball().carrier;
+ok("runoff turns the ball over to red", newCarrier && newCarrier.team === "red");
+eq("still playing after runoff turnover", F.state, "play");
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
