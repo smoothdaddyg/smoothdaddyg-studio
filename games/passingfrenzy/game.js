@@ -37,6 +37,8 @@
     THROWER_GRACE: 0.20,  // s before the thrower can re-catch their own pass
     CELEBRATE_T: 1.7,     // basket celebration (s)
     SPAWN_MARGIN: 36,     // players spawn/despawn this far off-screen
+    SPAWN_SAFE_Y: 60,    // red can't steal the blue carrier until it's this
+                         // far inside the court — no spawn-camping the reset
   };
 
   const canvas = document.getElementById("stage");
@@ -169,13 +171,15 @@
   }
 
   /* Give `team` the ball with a fresh player. Blue always enters from the
-     bottom moving up ("coming up"); red's direction is a coin flip.
-     Used after baskets, steals, violations, and off-screen turnovers. */
+     bottom moving up ("coming up"); red enters from the top moving down,
+     so the new carrier is always visibly on the court, never spawned
+     off-screen with the ball. Used after baskets, steals, violations,
+     and off-screen turnovers. */
   function resetBallToEdge(team) {
     // clear any old carrier flag
     for (const p of players) p.hasBall = false;
     ball.trail = [];
-    spawnPlayer(team, true, team === "blue" ? -1 : undefined);
+    spawnPlayer(team, true, team === "blue" ? -1 : 1);
     ball.shotBy = null; ball.shotTarget = null;
     ball.thrower = null; ball.throwerT = 0;
     ball.possT = 0; ball.beepT = 0; // fresh shot clock
@@ -221,11 +225,15 @@
     }
   }
 
-  /* closest player within catch radius, excluding the just-thrown grace */
+  /* closest player within catch radius.
+     Nobody can catch the very start of a throw — the ball has to leave the
+     passer's hands first. (Prevents a defender standing on the carrier from
+     "intercepting" on frame 1, which made taps feel like they never released
+     the ball and handed red free baskets.) */
   function catcherAt(x, y) {
+    if (ball.throwerT < CFG.THROWER_GRACE) return null;
     let best = null, bd = 1e9;
     for (const p of players) {
-      if (p === ball.thrower && ball.throwerT < CFG.THROWER_GRACE) continue;
       const d = dist(x, y, p.x, p.y);
       if (d < CFG.CATCH_R && d < bd) { bd = d; best = p; }
     }
@@ -236,15 +244,21 @@
     if (ball.mode === "carried") {
       if (ball.carrier) { ball.x = ball.carrier.x; ball.y = ball.carrier.y; }
       if (state === "play" && ball.carrier && ball.carrier.team === "blue") {
-        // RED PROXIMITY STEAL — a red just has to get close, not touch.
-        // Steal = instant 2 points for red, ball resets to blue at the bottom.
-        for (const p of players) {
-          if (p.team !== "red") continue;
-          if (dist(p.x, p.y, ball.carrier.x, ball.carrier.y) < CFG.STEAL_RADIUS) {
-            burst(p.x, p.y, 0, 16, 240);
-            audio.tone(180, 0.25, { type: "sawtooth", vol: 0.12, slideTo: 90 });
-            scoreBasket("red");
-            return;
+        // SPAWN PROTECTION — the fresh blue carrier enters from below the
+        // screen; red can't steal until the carrier is visibly in play on
+        // the court (past the bottom edge by SPAWN_SAFE_Y). Position-based,
+        // no timers: he has to get in play before he's stealable.
+        if (ball.carrier.y <= H - CFG.SPAWN_SAFE_Y) {
+          // RED PROXIMITY STEAL — a red just has to get close, not touch.
+          // Steal = instant 2 points for red, ball resets to blue at the bottom.
+          for (const p of players) {
+            if (p.team !== "red") continue;
+            if (dist(p.x, p.y, ball.carrier.x, ball.carrier.y) < CFG.STEAL_RADIUS) {
+              burst(p.x, p.y, 0, 16, 240);
+              audio.tone(180, 0.25, { type: "sawtooth", vol: 0.12, slideTo: 90 });
+              scoreBasket("red");
+              return;
+            }
           }
         }
         // SHOT CLOCK — hold the ball too long and it's a turnover.
@@ -584,20 +598,24 @@
   }
 
   function drawScoreboard() {
-    // blue score left, red score right — numbers only, no reading needed
+    // blue score left, red score right — numbers only, no reading needed.
+    // The blue box sits right of the 84px chunky back button (top-left),
+    // so the button never covers the blue score. (Button itself is NOT
+    // shrunk — studio rule.)
     ctx.fillStyle = "rgba(4,8,18,0.55)";
-    const bw = 150, bh = 52;
+    const bw = 110, bh = 52;
+    const bx = 12 + 84 + 8; // clear the back button: 12px pad + 84px button + 8px gap
     ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(12, 12, bw, bh, 14); else ctx.rect(12, 12, bw, bh);
+    if (ctx.roundRect) ctx.roundRect(bx, 12, bw, bh, 14); else ctx.rect(bx, 12, bw, bh);
     ctx.fill();
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(W - 12 - bw, 12, bw, bh, 14); else ctx.rect(W - 12 - bw, 12, bw, bh);
     ctx.fill();
-    drawPixelNumber(ctx, blueScore, 12 + bw / 2, 38, 5, "#4db2ff", true);
+    drawPixelNumber(ctx, blueScore, bx + bw / 2, 38, 5, "#4db2ff", true);
     drawPixelNumber(ctx, redScore, W - 12 - bw / 2, 38, 5, "#ff6b6b", true);
     // tiny team dots under the scores
     ctx.fillStyle = "#2f9dff";
-    ctx.beginPath(); ctx.arc(12 + bw / 2, 66, 5, 0, 6.2832); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx + bw / 2, 66, 5, 0, 6.2832); ctx.fill();
     ctx.fillStyle = "#ff5252";
     ctx.beginPath(); ctx.arc(W - 12 - bw / 2, 66, 5, 0, 6.2832); ctx.fill();
   }

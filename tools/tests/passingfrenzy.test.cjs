@@ -121,6 +121,7 @@ ok("win score is 10", F.cfg.WIN_SCORE === 10);
 eq("steal radius is 48", F.cfg.STEAL_RADIUS, 48);
 eq("shot clock is 4.0s", F.cfg.SHOT_CLOCK, 4.0);
 eq("shot warn window is 0.5s", F.cfg.SHOT_WARN, 0.5);
+eq("spawn protection margin is 60", F.cfg.SPAWN_SAFE_Y, 60);
 eq("red speed min matches blue (40)", F.cfg.RED_SPEED_MIN, 40);
 eq("red speed max matches blue (140)", F.cfg.RED_SPEED_MAX, 140);
 
@@ -137,11 +138,14 @@ ok("all red speeds within 40-140", allInRange);
 ok("red sprinters exist (some red faster than 120)", maxRed > 120);
 
 // PROXIMITY STEAL: red inside STEAL_RADIUS steals (no touch needed)
+// (carrier walked onto the court first — spawn protection blocks steals
+// while the fresh carrier is still entering from below the screen)
 F.start();
 parkReds();
 freezeAll();
 let carrier = F.debug.ball().carrier;
 ok("ball starts carried by blue", carrier && carrier.team === "blue");
+carrier.y -= F.cfg.SPAWN_MARGIN + F.cfg.SPAWN_SAFE_Y + 40; // visibly in play
 const thief = reds()[0];
 thief.x = carrier.x; thief.y = carrier.y; // distance 0 < 48
 const rsBefore = F.redScore;
@@ -159,11 +163,12 @@ ok("reset carrier is blue", postSteal && postSteal.team === "blue");
 ok("reset carrier enters from the bottom", postSteal && postSteal.y > 650);
 ok("reset carrier moves upward (coming up)", postSteal && postSteal.vy < 0);
 
-// NO STEAL just outside the radius
+// NO STEAL just outside the radius (carrier on the court, past spawn protection)
 F.start();
 parkReds();
 freezeAll();
 carrier = F.debug.ball().carrier;
+carrier.y -= F.cfg.SPAWN_MARGIN + F.cfg.SPAWN_SAFE_Y + 40; // visibly in play
 const lurker = reds()[0];
 lurker.x = carrier.x + F.cfg.STEAL_RADIUS + 25;
 lurker.y = carrier.y;
@@ -172,6 +177,27 @@ for (let i = 0; i < 5; i++) F.step(0.016);
 eq("no steal outside radius", F.redScore, rsBefore2);
 eq("ball still carried by blue", F.ballMode, "carried");
 ok("carrier still has it", F.debug.ball().carrier === carrier);
+
+// SPAWN PROTECTION: no steal while the fresh blue carrier is still entering
+// from below the screen — red can't spawn-camp the reset
+F.start();
+parkReds();
+freezeAll();
+carrier = F.debug.ball().carrier;
+const spawnY = carrier.y; // H + SPAWN_MARGIN — still off-screen, not in play
+const camper = reds()[0];
+camper.x = carrier.x; camper.y = carrier.y; // right on top of the carrier
+const rsBefore3 = F.redScore;
+for (let i = 0; i < 10; i++) F.step(0.016);
+eq("no spawn-camp steal while entering", F.redScore, rsBefore3);
+eq("ball still carried by blue", F.ballMode, "carried");
+ok("carrier still has it", F.debug.ball().carrier === carrier);
+// ...but once the carrier is visibly on the court, the same proximity steals
+carrier.y = spawnY - F.cfg.SPAWN_MARGIN - F.cfg.SPAWN_SAFE_Y - 40; // past the in-play line
+camper.x = carrier.x; camper.y = carrier.y;
+const rsBefore4 = F.redScore;
+F.step(0.016);
+eq("steal fires once carrier is in play", F.redScore, rsBefore4 + 2);
 
 // SHOT CLOCK: holding too long = turnover, NO red points, blue reset
 F.start();
@@ -223,6 +249,32 @@ ok("teammate caught the pass", caught);
 ok("clock reset on catch", F.debug.ball().possT < 0.3);
 ok("new holder is the mate", F.debug.ball().carrier === mate);
 
+// PASS RELEASE: a red crowding the carrier can't intercept on frame 1 —
+// the ball must leave the passer's hands first (universal throw grace).
+// Regression test: taps used to feel like they "wouldn't release" because
+// a nearby red instantly picked the pass for 2 free points.
+F.start();
+parkReds();
+freezeAll();
+const passer2 = F.debug.ball().carrier;
+passer2.x = 200;
+passer2.y -= F.cfg.SPAWN_MARGIN + F.cfg.SPAWN_SAFE_Y + 40; // on the court, in play
+const lurker2 = reds()[0];
+lurker2.x = passer2.x + 20; lurker2.y = passer2.y; // 20px away — inside CATCH_R
+for (const p of reds().slice(1)) { p.x = 30; p.y = -400; }
+const mate2 = blues().find((p) => p !== passer2);
+mate2.x = 200; mate2.y = 250; // up-court, but clear of the top basket's shoot zone
+for (const p of blues()) {
+  if (p === passer2 || p === mate2) continue;
+  p.x = 30; p.y = 30; // everyone else out of the pass lane
+}
+const rsBefore5 = F.redScore;
+F.tap(200, 250); // pass forward to the mate
+eq("tap releases the ball", F.ballMode, "flying");
+F.step(0.016); // one frame — the old bug intercepted here for red +2
+eq("no instant interception on frame 1", F.redScore, rsBefore5);
+ok("ball still flying after frame 1", F.ballMode === "flying");
+
 // BOTH DIRECTIONS: each team spawns a mix of up-movers and down-movers,
 // dir is always ±1, and vy's sign always matches dir
 let blueUp = 0, blueDown = 0, redUp = 0, redDown = 0, dirOk = true;
@@ -273,6 +325,10 @@ for (let i = 0; i < 30; i++) F.step(0.016); // 57.6px > 46px to the edge
 const newCarrier = F.debug.ball().carrier;
 ok("runoff turns the ball over to red", newCarrier && newCarrier.team === "red");
 eq("still playing after runoff turnover", F.state, "play");
+// red's reset carrier enters visibly from the top (moving down), never
+// spawned off-screen with the ball
+ok("red reset carrier moves downward (from the top)", newCarrier && newCarrier.vy > 0);
+ok("red reset carrier near the top edge", newCarrier && newCarrier.y < 120);
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
