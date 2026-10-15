@@ -27,7 +27,7 @@
    ============================================================ */
 
 const GAMES = [
-  { id: "frisbeedog", title: "Frisbee Dog", desc: "Tap to throw the frisbee. Lead the running dog and watch him leap for the catch!",
+  { id: "frisbeedog", title: "Frisbee Dog", desc: "Read the route, then tap to throw the frisbee — intercept the running dog for the catch!",
     hue: 35, sprite: "ball", url: "games/frisbeedog/" },
   { id: "passingfrenzy", title: "Passing Frenzy", desc: "Tap to pass the basketball. Lead your teammates, dodge interceptions, score 10 to win!",
     hue: 200, sprite: "ball", url: "games/passingfrenzy/" },
