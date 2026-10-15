@@ -417,10 +417,12 @@
                      (p.vy > 0 && p.y > H + CFG.SPAWN_MARGIN);
       if (exited) {
         if (p.hasBall && (state === "play")) {
-          // carrier ran off with it — turnover to the other team at THEIR edge
-          const toTeam = p.team === "blue" ? "red" : "blue";
+          // carrier ran off with it — fresh blue player from the bottom.
+          // (No red-carry interlude: red can't score with the ball and blue
+          // can't steal it back, so handing it to red was just seconds of
+          // dead taps. The turnover penalty is losing your field position.)
           players.splice(i, 1);
-          resetBallToEdge(toTeam);
+          resetBallToEdge("blue");
           audio.tone(220, 0.2, { type: "square", vol: 0.08, slideTo: 140 });
         } else {
           players.splice(i, 1);

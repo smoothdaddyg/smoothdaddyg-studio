@@ -316,19 +316,24 @@ ok("top-exiting player is removed", !F.debug.players().includes(riserRef));
 ok("roster replenished after top exit", F.players >= 12);
 eq("still playing after top recycle", F.state, "play");
 
-// CARRIER RUNOFF: a blue carrier that runs off the bottom turns it over to red
+// CARRIER RUNOFF: a blue carrier that runs off the bottom resets to a fresh
+// blue player from the bottom — no dead red-carry interlude (red can't score
+// with the ball and blue can't steal it back, so the old handoff to red just
+// meant seconds of dead taps; regression test for Juan's "won't release" report)
 F.start();
 parkReds();
 const runaway = F.debug.ball().carrier;
 runaway.vx = 0; runaway.vy = 120; runaway.y = 690; // blue carrier heading down, near bottom
 for (let i = 0; i < 30; i++) F.step(0.016); // 57.6px > 46px to the edge
 const newCarrier = F.debug.ball().carrier;
-ok("runoff turns the ball over to red", newCarrier && newCarrier.team === "red");
-eq("still playing after runoff turnover", F.state, "play");
-// red's reset carrier enters visibly from the top (moving down), never
-// spawned off-screen with the ball
-ok("red reset carrier moves downward (from the top)", newCarrier && newCarrier.vy > 0);
-ok("red reset carrier near the top edge", newCarrier && newCarrier.y < 120);
+ok("runoff resets to a fresh blue carrier", newCarrier && newCarrier.team === "blue");
+eq("still playing after runoff", F.state, "play");
+// the fresh carrier enters from the bottom (moving up), protected by the
+// spawn gate until on-court
+ok("fresh blue carrier moves upward (from the bottom)", newCarrier && newCarrier.vy < 0);
+// no dead-tap window: a tap right after the runoff throws immediately
+F.tap(200, 100);
+eq("tap right after runoff throws the ball", F.ballMode, "flying");
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
