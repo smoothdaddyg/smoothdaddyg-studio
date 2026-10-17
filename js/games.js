@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "sinktheship", title: "Sink the Ship!", desc: "You're the submarine! Drag to steer, torpedoes fire themselves — sink every ship in 3 levels!",
+    hue: 160, sprite: "plane", url: "games/sinktheship/" },
   { id: "tag", title: "Tag! You're It", desc: "You're it! Drag to chase five giggling friends around the playground and tag them all!",
     hue: 95, sprite: "gem", url: "games/tag/" },
   { id: "frisbeedog", title: "Frisbee Dog", desc: "Read the route, then tap to throw the frisbee — intercept the running dog for the catch!",
