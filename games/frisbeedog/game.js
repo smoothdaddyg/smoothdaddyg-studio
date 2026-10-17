@@ -25,9 +25,10 @@
     FLIGHT_T: 0.6,      // frisbee flight seconds, tap to landing
     LINEUP_Y: 90,       // dog lines up this far from the bottom
     READY_T: 0.8,       // "ready" beat: telegraph the route, then release
-    RESOLVE_T: 0.9,     // celebration beat after catch / miss
-    CUT_MIN: 0.30,      // routes cut after 30–60% of field height
-    CUT_MAX: 0.60,
+    RESOLVE_T: 1.3,     // celebration beat after catch / miss (longer so the outcome reads)
+    CUT_MIN: 0.25,      // routes cut after 25–70% of field height
+    CUT_MAX: 0.70,
+    WAIT_T: 2.5,        // dog waits this long at a short route's end before jogging back
     EDGE_M: 40,         // slant/out break toward this sideline margin
   };
 
@@ -50,10 +51,12 @@
   // his route, one tap allowed) -> 'resolve' (catch/miss beat) -> 'return'
   // (dog jogs back to the lineup) -> 'ready' with a fresh route.
   let round = { phase: "ready", t: 0, route: null, dots: [],
-                thrown: false, result: null };
+                thrown: false, result: null, waiting: false, waitT: 0 };
 
-  // frisbee modes: 'ready' | 'flying' | 'done'
+  // frisbee modes: 'ready' | 'flying' | 'caught' | 'landed'
   // top-down: straight flat flight, spinning disc + gold trail, no arc.
+  // 'caught' = disc in the dog's mouth (THE catch signal);
+  // 'landed' = disc lying on the grass where it fell (THE miss signal).
   let frisbee = null;
 
   let parts = [];   // particles {x,y,vx,vy,t,life,hue,r}
@@ -115,26 +118,30 @@
     audio.tone(740, 0.09, { type: "square", vol: 0.12, slideTo: 380 });
     audio.tone(880, 0.09, { type: "square", vol: 0.12, slideTo: 420, when: 0.11 });
   }
-  function sndThud() {
-    audio.tone(150, 0.16, { type: "sine", vol: 0.09, slideTo: 85 }); // soft landing
+  function sndOops() {
+    // gentle "oops" — two soft descending tones. Forgiving, never sad.
+    audio.tone(392, 0.14, { type: "triangle", vol: 0.10, slideTo: 330 });
+    audio.tone(330, 0.18, { type: "triangle", vol: 0.10, slideTo: 262, when: 0.15 });
   }
   function sndWin() {
     audio.arp([523, 659, 784, 1047, 880, 1047, 1319, 1568], 0.1, "square", 0.12);
   }
 
   /* ---------------- routes ----------------
-     Three simple, readable routes, left/right mirrored, cut point
-     randomized per round. Waypoints run bottom -> off the top so an
-     unthrown round always ends with the dog running off quietly. */
+     Four simple, readable routes, left/right mirrored, cut point
+     randomized per round. Only the streak runs off the top — slant,
+     out, and curl END on the field (stop=true): the dog stops at the
+     last waypoint and waits for the throw, facing the thrower. The
+     paw-print telegraph shows the short ending, so it reads clearly. */
   function genRoute(forceType, forceSide, forceCut) {
-    const types = ["streak", "slant", "out"];
+    const types = ["streak", "slant", "out", "curl"];
     const type = forceType || types[(Math.random() * types.length) | 0];
     const side = forceSide || (Math.random() < 0.5 ? -1 : 1);
     const sx = W / 2, sy = H - CFG.LINEUP_Y;
     const pts = [{ x: sx, y: sy }];
-    let cutY = null;
+    let cutY = null, stop = false;
     if (type === "streak") {
-      pts.push({ x: sx, y: -60 });
+      pts.push({ x: sx, y: -60 }); // the only route that runs off the top
     } else {
       const cutFrac = (forceCut !== undefined && forceCut !== null)
         ? forceCut : rnd(CFG.CUT_MIN, CFG.CUT_MAX);
@@ -142,16 +149,19 @@
       pts.push({ x: sx, y: cutY });
       const edgeX = side > 0 ? W - CFG.EDGE_M : CFG.EDGE_M;
       if (type === "slant") {
-        // break diagonally up-out (~45 deg) toward the sideline
+        // break diagonally up-out (~45 deg) toward the sideline — and stop
         const run = Math.abs(edgeX - sx);
         pts.push({ x: edgeX, y: Math.max(50, cutY - run) });
-      } else {
-        // hard horizontal cut to the sideline
+      } else if (type === "out") {
+        // hard horizontal cut to the sideline — and stop
         pts.push({ x: edgeX, y: cutY });
+      } else {
+        // curl: run up, stop short, turn back toward the thrower
+        pts.push({ x: sx, y: Math.max(70, cutY - 40) });
       }
-      pts.push({ x: edgeX, y: -60 }); // then up and off
+      stop = true; // dog waits at the end of the route for the throw
     }
-    return { type: type, side: side, cutY: cutY, points: pts, seg: 0 };
+    return { type: type, side: side, cutY: cutY, points: pts, seg: 0, stop: stop };
   }
 
   // paw-print dots sampled along the route polyline — the telegraph
@@ -184,7 +194,7 @@
     const sy = H - CFG.LINEUP_Y;
     dog.x = W / 2; dog.y = sy;
     dog.angle = -Math.PI / 2; // facing upfield
-    dog.speed = dogSpeed();
+    dog.speed = dogSpeed() * rnd(0.88, 1.12); // a little different every round
     dog.flipT = 0; dog.shakeT = 0;
     round.route = genRoute(forceType, forceSide, forceCut);
     round.dots = sampleDots(round.route.points);
@@ -192,6 +202,8 @@
     round.t = 0;
     round.thrown = false;
     round.result = null;
+    round.waiting = false;
+    round.waitT = 0;
     resetFrisbee();
   }
 
@@ -225,25 +237,35 @@
   }
 
   function doCatch() {
+    // UNMISTAKABLE: the disc ends up in his mouth (drawn there — see
+    // drawFrisbee), big star explosion, happy fanfare, big gold ring.
     catches++;
     dog.speed = dogSpeed();
     dog.flipT = 0.55;                       // joyful spin
+    frisbee.mode = "caught";
     sndBark();
-    confettiBlast(dog.x, dog.y - 50, 26);
-    rings.push({ x: dog.x, y: dog.y - 30, r: 20, t: 0, life: 0.5, hue: 45 });
+    audio.arp([523, 659, 784, 1047], 0.09, "square", 0.12); // happy fanfare
+    confettiBlast(dog.x, dog.y - 50, 60);
+    rings.push({ x: dog.x, y: dog.y - 30, r: 30, t: 0, life: 0.8, hue: 45 });
     if (catches >= CFG.WIN_CATCHES) winGame();
   }
 
   function doMiss(x, y) {
-    // forgiving: soft thud, confused head-shake, next round.
-    // Nothing lost — no penalty, no streak reset, no sad sounds.
-    sndThud();
+    // CLEAR but forgiving: the disc STAYS on the grass where it landed
+    // (drawn there — see drawFrisbee), the dog looks at it and does a
+    // soft head-shake. Nothing lost — no penalty, no streak reset,
+    // no sad sounds.
+    frisbee.mode = "landed";
+    frisbee.x = x; frisbee.y = y;
+    dog.angle = Math.atan2(y - dog.y, x - dog.x); // look at the missed disc
     dog.shakeT = 0.9;
-    for (let i = 0; i < 8; i++) {
-      addPart({ x: x + rnd(-8, 8), y: y + rnd(-4, 4),
-                vx: rnd(-60, 60), vy: rnd(-70, -10),
-                t: 0, life: rnd(0.3, 0.6), hue: 90, r: rnd(2, 4) });
+    sndOops();
+    for (let i = 0; i < 14; i++) {
+      addPart({ x: x + rnd(-10, 10), y: y + rnd(-5, 5),
+                vx: rnd(-90, 90), vy: rnd(-90, -20),
+                t: 0, life: rnd(0.4, 0.8), hue: 100, r: rnd(2, 5) });
     }
+    rings.push({ x: x, y: y, r: 14, t: 0, life: 0.6, hue: 100 }); // dust ring
   }
 
   function onTap(x, y) {
@@ -267,7 +289,8 @@
 
   /* ---------------- update ---------------- */
   // move the dog along his route polyline; returns true when he has
-  // run the whole route (off the top)
+  // reached the last waypoint (off the top for streak, stopped on the
+  // field for slant / out / curl)
   function runRoute(dt) {
     const r = round.route;
     let remaining = dog.speed * dt;
@@ -316,21 +339,38 @@
         for (const tr of f.trail) tr.t += dt;
         if (k >= 1) {
           // landing: did we hit the dog and the frisbee together?
-          f.mode = "done";
           if (dist(dog.x, dog.y, f.tx, f.ty) < CFG.CATCH_R) {
             round.result = "catch";
-            doCatch();
+            doCatch(); // sets f.mode = "caught"
           } else {
             round.result = "miss";
-            doMiss(f.tx, f.ty);
+            doMiss(f.tx, f.ty); // sets f.mode = "landed"
           }
           if (state === "play") { round.phase = "resolve"; round.t = 0; }
         }
       } else if (finished) {
-        // never threw and the route ran out — quiet reset, no penalty
-        round.result = "runoff";
-        round.phase = "return";
-        round.t = 0;
+        const r = round.route;
+        if (r.stop && !round.waiting) {
+          // short route: the dog stops at the end and waits for the
+          // throw, facing back toward the thrower, eager-bouncing.
+          round.waiting = true; round.waitT = 0;
+          dog.angle = Math.atan2((H - CFG.LINEUP_Y) - dog.y, W / 2 - dog.x);
+        } else if (!r.stop) {
+          // deep route ran out with no throw — quiet reset, no penalty
+          round.result = "runoff";
+          round.phase = "return";
+          round.t = 0;
+        }
+      }
+      // waiting at a short route's end: give the throw time, then jog back
+      if (round.waiting && !round.thrown && round.phase === "running") {
+        round.waitT += dt;
+        if (round.waitT >= CFG.WAIT_T) {
+          round.waiting = false;
+          round.result = "runoff";
+          round.phase = "return";
+          round.t = 0;
+        }
       }
     } else if (ph === "resolve") {
       if (round.t >= CFG.RESOLVE_T) {
@@ -448,8 +488,8 @@
     ctx.beginPath();
     ctx.ellipse(0, 12, 48, 14, 0, 0, 6.2832);
     ctx.fill();
-    // eager bounce during the ready beat
-    if (round.phase === "ready" && state === "play") {
+    // eager bounce during the ready beat and while waiting at a short route's end
+    if ((round.phase === "ready" || round.waiting) && state === "play") {
       ctx.translate(0, -Math.abs(Math.sin(time * 10)) * 9);
     }
     let ang = d.angle;
@@ -549,13 +589,23 @@
 
   function drawFrisbee() {
     const f = frisbee;
-    if (!f || f.mode !== "flying") return;
-    for (const tr of f.trail) {
-      const k = Math.max(0, 1 - tr.t / 0.45);
-      ctx.fillStyle = "rgba(255,210,63," + (k * 0.5).toFixed(2) + ")";
-      ctx.beginPath(); ctx.arc(tr.x, tr.y, 10 * k + 2, 0, 6.2832); ctx.fill();
+    if (!f) return;
+    if (f.mode === "flying") {
+      for (const tr of f.trail) {
+        const k = Math.max(0, 1 - tr.t / 0.45);
+        ctx.fillStyle = "rgba(255,210,63," + (k * 0.5).toFixed(2) + ")";
+        ctx.beginPath(); ctx.arc(tr.x, tr.y, 10 * k + 2, 0, 6.2832); ctx.fill();
+      }
+      drawDiscTop(f.x, f.y, 22, f.spin);
+    } else if (f.mode === "caught") {
+      // THE catch signal: the disc is visibly in the dog's mouth
+      const mx = dog.x + Math.cos(dog.angle) * 72;
+      const my = dog.y + Math.sin(dog.angle) * 72;
+      drawDiscTop(mx, my, 22, f.spin);
+    } else if (f.mode === "landed") {
+      // THE miss signal: the disc lies on the grass where it fell
+      drawDiscTop(f.x, f.y, 22, 0);
     }
-    drawDiscTop(f.x, f.y, 22, f.spin);
   }
 
   /* ---------------- drawing: treats (win shower) ---------------- */

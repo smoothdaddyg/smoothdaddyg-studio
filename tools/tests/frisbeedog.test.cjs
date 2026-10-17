@@ -1,11 +1,14 @@
 /* Node test for Frisbee Dog v2 — top-down route running (window.__dogTest).
    Verifies: title tap starts (ready phase + telegraph), taps ignored during
    ready, release -> running + telegraph fades, route generation (streak /
-   slant / out, mirrored sides, cut range), tap throws frisbee flat to the
+   slant / out / curl, mirrored sides, cut range; slant/out/curl end SHORT
+   on the field with the dog waiting), tap throws frisbee flat to the
    tap point, one throw per round, intercept-a-catch on streak and slant,
-   tap-where-he-was -> miss (forgiving, no penalty), no-throw runoff ->
-   quiet reset, round cycling (resolve -> return -> ready), 10 catches ->
-   win, PLAY AGAIN resets, and config sanity.
+   tap-where-he-was -> miss (disc stays on the grass, forgiving, no
+   penalty), catch -> disc visibly in his mouth, short-route wait ->
+   quiet reset, no-throw runoff -> quiet reset, round cycling
+   (resolve -> return -> ready), 10 catches -> win, PLAY AGAIN resets,
+   and config sanity.
    Run: node tools/tests/frisbeedog.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -77,8 +80,8 @@ function stepUntil(want, cap) {
 eq("win at 10 catches", F.cfg.WIN_CATCHES, 10);
 eq("catch radius is generous (68)", F.cfg.CATCH_R, 68);
 eq("flight time is 0.6s", F.cfg.FLIGHT_T, 0.6);
-eq("cut range 30-60%", F.cfg.CUT_MIN, 0.30);
-eq("cut range 30-60% (max)", F.cfg.CUT_MAX, 0.60);
+eq("cut range 25-70%", F.cfg.CUT_MIN, 0.25);
+eq("cut range 25-70% (max)", F.cfg.CUT_MAX, 0.70);
 ok("catch radius > dog body size", F.cfg.CATCH_R > F.cfg.DOG_R);
 
 // ---- title -> play: ready phase + telegraph ----
@@ -101,7 +104,7 @@ ok("release happens after the ready beat", stepUntil("running", 80));
 for (let i = 0; i < 50; i++) F.step(0.016); // let the dots fade
 eq("telegraph gone after release", F.debug.dotAlpha(), 0);
 
-// ---- route generation: all three types, mirrored, cut in range ----
+// ---- route generation: all four types, mirrored, cut in range ----
 F.start();
 F.debug.forceRoute("streak");
 {
@@ -112,34 +115,48 @@ F.debug.forceRoute("streak");
   eq("streak starts at lineup y", r.points[0].y, LINEUP.y);
   eq("streak runs straight up", r.points[1].x, LINEUP.x);
   eq("streak runs off the top", r.points[1].y, -60);
+  eq("streak does not stop (runs off)", r.stop, false);
 }
 F.debug.forceRoute("slant", 1, 0.4);
 {
   const r = F.debug.route();
-  eq("slant has 4 waypoints", r.points.length, 4);
+  eq("slant has 3 waypoints (ends short)", r.points.length, 3);
   eq("slant stem is up the middle", r.points[1].x, LINEUP.x);
   ok("slant cutY in range", r.cutY >= 60 && r.cutY <= LINEUP.y - 80);
   eq("slant breaks right", r.points[2].x, W - 40);
   ok("slant diagonal climbs", r.points[2].y < r.points[1].y);
-  eq("slant finishes off the top", r.points[3].y, -60);
+  ok("slant ends ON the field (not off the top)", r.points[2].y > 50);
+  eq("slant stops at the end", r.stop, true);
 }
 F.debug.forceRoute("slant", -1, 0.4);
 eq("slant mirrors left", F.debug.route().points[2].x, 40);
 F.debug.forceRoute("out", 1, 0.5);
 {
   const r = F.debug.route();
-  eq("out has 4 waypoints", r.points.length, 4);
+  eq("out has 3 waypoints (ends short)", r.points.length, 3);
   eq("out cut is horizontal", r.points[2].y, r.points[1].y);
   eq("out breaks right", r.points[2].x, W - 40);
-  eq("out finishes off the top", r.points[3].y, -60);
+  ok("out ends ON the field (not off the top)", r.points[2].y > 50);
+  eq("out stops at the end", r.stop, true);
 }
-// all three types are producible from the random generator
+F.debug.forceRoute("curl");
+{
+  const r = F.debug.route();
+  eq("curl type", r.type, "curl");
+  eq("curl has 3 waypoints (stem + short hook, ends short)", r.points.length, 3);
+  eq("curl stays up the middle", r.points[2].x, LINEUP.x);
+  ok("curl ends ON the field, short", r.points[2].y >= 70);
+  ok("curl hook is short (stays near the cut)", Math.abs(r.points[2].y - r.points[1].y) <= 40);
+  eq("curl stops at the end", r.stop, true);
+}
+// all four types are producible from the random generator
 {
   const seen = {};
   for (let i = 0; i < 60; i++) { F.debug.forceRoute(); seen[F.debug.route().type] = 1; }
   ok("random routes produce streak", !!seen.streak);
   ok("random routes produce slant", !!seen.slant);
   ok("random routes produce out", !!seen.out);
+  ok("random routes produce curl", !!seen.curl);
 }
 
 // ---- tap throws the frisbee flat to the tap point ----
@@ -163,6 +180,7 @@ eq("throw away", F.debug.frisbee().mode, "flying");
 for (let i = 0; i < 45; i++) F.step(0.016); // 0.72s > 0.6s flight
 eq("meeting-point tap -> CATCH", F.catches, 1);
 eq("catch -> resolve beat", F.debug.phase(), "resolve");
+eq("catch: disc ends up in his mouth", F.debug.frisbee().mode, "caught");
 // round cycles: resolve -> return (jog back) -> ready (fresh route)
 ok("round cycles back to ready", stepUntil("ready", 400));
 eq("frisbee ready for the next round", F.debug.frisbee().mode, "ready");
@@ -176,6 +194,7 @@ F.debug.forceRoute("streak");
 F.tap(LINEUP.x, LINEUP.y); // right where he stood at throw time — he's gone
 for (let i = 0; i < 45; i++) F.step(0.016);
 eq("tap-behind -> miss (counter 0)", F.catches, 0);
+eq("miss: disc stays on the grass", F.debug.frisbee().mode, "landed");
 eq("miss keeps game in play", F.state, "play");
 ok("miss cycles to a fresh round", stepUntil("ready", 400));
 eq("still no penalty after the cycle", F.catches, 0);
@@ -183,9 +202,10 @@ eq("still no penalty after the cycle", F.catches, 0);
 // ---- intercept-a-catch on a slant: read the cut, hit the meeting point ----
 F.start();
 F.debug.forceRoute("slant", 1, 0.4); // deterministic cut
-// route: (200,610) -> (200,330) -> (360,170) -> (360,-60); leg1 = 280px @130
-for (let i = 0; i < 150; i++) F.step(0.016); // 2.4s: dog is on the diagonal
+// route: (200,610) -> (200,330) -> (360,170); ends at the sideline; leg1 = 280px
 {
+  let guard = 0;
+  while (guard++ < 300 && F.debug.dog().x <= 205) F.step(0.016); // wait for the cut (speed jitters)
   const d = F.debug.dog();
   ok("dog made the cut", d.x > 205);
   ok("dog still on the field", d.y > 60);
@@ -196,13 +216,66 @@ eq("slant intercept -> CATCH", F.catches, 1);
 
 // ---- no-throw runoff -> quiet reset, no penalty, no celebration ----
 F.start();
-F.debug.forceRoute("streak");
-for (let i = 0; i < 500; i++) F.step(0.016); // 8s: 5.2s to run off + jog back
+F.debug.forceRoute("streak"); // skipReady -> straight to running
+for (let i = 0; i < 700; i++) { // let the unthrown streak run its course
+  if (F.debug.phase() === "ready" && i > 60) break; // runoff cycled to a fresh round
+  F.step(0.016);
+}
 eq("runoff cycles back to ready", F.debug.phase(), "ready");
 eq("runoff: counter untouched", F.catches, 0);
 eq("runoff: frisbee ready", F.debug.frisbee().mode, "ready");
 eq("runoff: no catch spin", F.debug.dog().flipT, 0);
 eq("runoff: no miss shake", F.debug.dog().shakeT, 0);
+
+// ---- short route: dog stops and waits at the end, then jogs back ----
+F.start();
+F.debug.forceRoute("curl"); // skipReady -> running, no throw
+{
+  const r = F.debug.route();
+  const end = r.points[r.points.length - 1];
+  let guard = 0;
+  while (guard++ < 800) {
+    const d = F.debug.dog();
+    if (Math.abs(d.x - end.x) < 2 && Math.abs(d.y - end.y) < 2) break;
+    F.step(0.016);
+  }
+  const d = F.debug.dog();
+  ok("waiting dog reached the short end", Math.abs(d.x - end.x) < 2 && Math.abs(d.y - end.y) < 2);
+  eq("still running while waiting (no throw yet)", F.debug.phase(), "running");
+  const wx0 = d.x, wy0 = d.y;
+  for (let i = 0; i < 10; i++) F.step(0.016); // let him settle exactly on the spot
+  const wx = F.debug.dog().x, wy = F.debug.dog().y;
+  ok("dog settled at the short end", Math.abs(wx - wx0) < 3 && Math.abs(wy - wy0) < 3);
+  for (let i = 0; i < 30; i++) F.step(0.016); // 0.48s — dog should hold position
+  const d2 = F.debug.dog();
+  ok("waiting dog holds position", Math.abs(d2.x - wx) < 0.5 && Math.abs(d2.y - wy) < 0.5);
+  eq("still running during the wait", F.debug.phase(), "running");
+}
+// a throw while he's waiting still works: lead him where he sits
+F.start();
+F.debug.forceRoute("curl");
+{
+  const r = F.debug.route();
+  const end = r.points[r.points.length - 1];
+  let guard = 0;
+  while (guard++ < 800) {
+    const d = F.debug.dog();
+    if (Math.abs(d.x - end.x) < 2 && Math.abs(d.y - end.y) < 2) break;
+    F.step(0.016);
+  }
+  const d = F.debug.dog();
+  F.tap(d.x, d.y); // throw right at the waiting dog
+  for (let i = 0; i < 45; i++) F.step(0.016);
+  eq("throw at the waiting dog -> CATCH", F.catches, 1);
+  eq("waiting-dog catch: disc in his mouth", F.debug.frisbee().mode, "caught");
+}
+// no throw at all: after the wait the round quietly resets
+F.start();
+F.debug.forceRoute("curl");
+ok("wait expires -> cycles back to ready", stepUntil("ready", 900));
+eq("wait runoff: counter untouched", F.catches, 0);
+eq("wait runoff: frisbee ready", F.debug.frisbee().mode, "ready");
+eq("wait runoff: no catch spin", F.debug.dog().flipT, 0);
 
 // ---- 10 catches -> WIN ----
 F.start();

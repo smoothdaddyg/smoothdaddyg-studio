@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "tag", title: "Tag! You're It", desc: "You're it! Drag to chase five giggling friends around the playground and tag them all!",
+    hue: 95, sprite: "gem", url: "games/tag/" },
   { id: "frisbeedog", title: "Frisbee Dog", desc: "Read the route, then tap to throw the frisbee — intercept the running dog for the catch!",
     hue: 35, sprite: "ball", url: "games/frisbeedog/" },
   { id: "passingfrenzy", title: "Passing Frenzy", desc: "Tap to pass the basketball. Lead your teammates, dodge interceptions, score 10 to win!",
