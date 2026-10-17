@@ -1,12 +1,12 @@
 /* ============================================================
-   FRISBEE DOG v3 — SmoothDaddyG ("lead him")
-   Real-world frisbee-dog rules. The dog lines up, the whistle
-   blows, and he RUNS — no fixed route, just a random heading
-   (usually upfield) with a lively weave. You throw the disc
-   AHEAD of him; he spots it after a beat, SPRINTS to the landing
-   spot, and — if you judged the lead right — leaps for the catch.
-   The gold ring shows his sprint reach: land the disc inside it.
-   Four paw dots ahead of him show his current intent, live.
+   FRISBEE DOG v4 — SmoothDaddyG ("out and across")
+   Pure interception. The dog lines up, the paw-print telegraph
+   shows his path during the ready beat, the whistle blows, and
+   he RUNS: out deep, then he TURNS and runs across the screen.
+   Every round is out-and-turn — random side, random turn depth —
+   but the shape is always the same. At ANY point you throw the
+   disc (constant speed, Passing Frenzy pass feel) to INTERCEPT
+   his path: if he's there when it lands, he catches it.
    ONE interaction: tap below the top strip to throw. One throw
    per round, no losing — first to 10 catches wins the treat shower.
    ============================================================ */
@@ -17,21 +17,19 @@
   /* ---------------- tuning (all gameplay numbers live here) ---------------- */
   const CFG = {
     WIN_CATCHES: 10,    // first to this many catches wins
-    DOG_R: 32,          // dog body size (px) — smaller now, more field room
+    DOG_R: 32,          // dog body size (px) — small, more field room
     CATCH_R: 68,        // generous catch radius — be kind
-    DOG_SPEED: 130,     // starting run speed px/s — moderate, predictable
+    DOG_SPEED: 210,     // starting run speed px/s — fast!
     DOG_SPEED_UP: 12,   // +px/s every SPEED_EVERY catches (gentle ramp)
     SPEED_EVERY: 2,
-    DOG_SPEED_MAX: 230, // cap — stays super simple
-    SPRINT_MULT: 1.5,   // sprint speed multiplier once he spots the disc
-    FLIGHT_T: 0.9,      // frisbee flight seconds — ease-out cubic, dies at the end
-    REACT_T: 0.25,      // beat before the dog locks onto the landing point
-    SLOW_REACT_T: 0.55, // 10% "slow read" — the dang-it moment
-    SLOW_REACT_CHANCE: 0.1,
+    DOG_SPEED_MAX: 260, // cap
+    DISC_SPEED: 225,    // frisbee speed px/s — constant, Passing Frenzy pass feel
     STRIP_H: 120,       // top UI strip: taps, targets and the dog stay below it
-    RUN_T: 4.5,         // max free-run seconds with no throw before a quiet reset
     RESOLVE_T: 1.3,     // celebration beat after catch / miss (longer so the outcome reads)
-    READY_T: 0.8,       // "ready" beat: eager bounce, then the whistle
+    READY_T: 0.8,       // "ready" beat: paw-print telegraph, then the whistle
+    TURN_MIN: 0.55,     // turn happens 55–70% of the way out — deep, never shallow
+    TURN_MAX: 0.70,
+    EDGE_M: 40,         // turn runs toward this sideline margin
     JOG_SPEED: 260,     // jog back to the lineup between rounds
     LINEUP_Y: 90,       // dog lines up this far from the bottom
   };
@@ -48,20 +46,21 @@
 
   // the dog: {x,y,angle,speed,phase,flipT,shakeT}
   // angle = facing direction (radians, 0 = +x). Top-down: he rotates to
-  // face wherever he's going. heading = his free-run direction;
-  // baseX/baseY = weave-free position; base = run speed before sprinting.
+  // face wherever he's going along his route.
   let dog = null;
 
-  // round phases: 'ready' (eager bounce) -> 'running' (dog runs free,
-  // one tap allowed) -> 'resolve' (catch/miss beat) -> 'return'
-  // (dog jogs back to the lineup) -> 'ready' with a fresh heading.
-  let round = { phase: "ready", t: 0, thrown: false, result: null,
-                reactT: 0, reacting: false };
+  // round phases: 'ready' (paw telegraph + eager bounce) -> 'running'
+  // (dog runs his out-and-turn route, one tap allowed) -> 'resolve'
+  // (catch/miss beat) -> 'return' (dog jogs back to the lineup) ->
+  // 'ready' with a fresh route.
+  let round = { phase: "ready", t: 0, route: null, dots: [],
+                thrown: false, result: null };
 
   // frisbee modes: 'ready' | 'flying' | 'caught' | 'landed'
-  // top-down: straight flat flight, spinning disc + gold trail, no arc.
-  // 'caught' = disc in the dog's mouth (THE catch signal);
-  // 'landed' = disc lying on the grass where it fell (THE miss signal).
+  // top-down: straight flight at constant speed, spinning disc + gold
+  // trail, no arc. 'caught' = disc in the dog's mouth (THE catch
+  // signal); 'landed' = disc lying on the grass where it fell (THE
+  // miss signal).
   let frisbee = null;
 
   let parts = [];   // particles {x,y,vx,vy,t,life,hue,r}
@@ -132,80 +131,92 @@
     audio.arp([523, 659, 784, 1047, 880, 1047, 1319, 1568], 0.1, "square", 0.12);
   }
 
-  /* ---------------- free run ----------------
-     No fixed route. Each round the dog takes off on a random heading —
-     85% upfield (straight-up ± 50°), 15% wide (± 50–80°) — with a gentle
-     perpendicular weave so he feels alive. The player reads the heading
-     from the intent dots and the sprint-reach ring, then leads him. */
-  function pickHeading() {
-    const up = -Math.PI / 2;
-    if (Math.random() < 0.85) return up + rnd(-0.87, 0.87); // ±50° upfield
-    const s = Math.random() < 0.5 ? -1 : 1;
-    return up + s * rnd(0.87, 1.40);                        // wide: ±50–80°
+  /* ---------------- routes ----------------
+     Out-and-turn, every round: the dog runs OUT deep (55–70% of the
+     way from the lineup to the top strip), TURNS, and runs ACROSS
+     toward a sideline and off. Side and turn depth are randomized,
+     but the shape is always the same — read the telegraph, then
+     intercept his path. */
+  function genRoute(forceSide, forceTurnFrac) {
+    const side = (forceSide !== undefined && forceSide !== null)
+      ? forceSide : (Math.random() < 0.5 ? -1 : 1);
+    const yBot = H - CFG.LINEUP_Y;
+    const yTop = CFG.STRIP_H + 60;
+    const frac = (forceTurnFrac !== undefined && forceTurnFrac !== null)
+      ? forceTurnFrac : rnd(CFG.TURN_MIN, CFG.TURN_MAX);
+    const yTurn = yBot - frac * (yBot - yTop);
+    const sx = W / 2;
+    const points = [
+      { x: sx, y: yBot },
+      { x: sx, y: yTurn },
+      { x: side > 0 ? W + 60 : -60, y: yTurn },
+    ];
+    return { side: side, yTurn: yTurn, points: points, seg: 0 };
   }
 
-  // sprint reach: how far he can get once he spots the disc —
-  // sprint speed × the flight time left after his reaction beat.
-  function zoneReach() {
-    return CFG.SPRINT_MULT * dog.base * (CFG.FLIGHT_T - CFG.REACT_T);
+  // paw-print dots sampled along the route polyline — the telegraph
+  function sampleDots(points) {
+    const dots = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const d = dist(a.x, a.y, b.x, b.y);
+      const n = Math.max(1, Math.floor(d / 44));
+      for (let k = (i === 0 ? 1 : 0); k <= n; k++) {
+        const t = k / n;
+        dots.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+    return dots;
   }
 
-  // advance the free run one step: straight along the heading with a
-  // sinusoidal lateral weave (0.8 Hz, ~10px). Clamped to the field and
-  // below the top UI strip; clampedT tracks time spent pinned.
-  function moveFreeRun(dt) {
-    const h = dog.heading;
-    dog.weaveT += dt;
-    const w = 2 * Math.PI * 0.8;
-    const A = 10;
-    dog.baseX += Math.cos(h) * dog.speed * dt;
-    dog.baseY += Math.sin(h) * dog.speed * dt;
-    const px = -Math.sin(h), py = Math.cos(h); // perpendicular
-    const off = A * Math.sin(w * dog.weaveT);
-    const nx = dog.baseX + px * off;
-    const ny = dog.baseY + py * off;
-    const x0 = 40, x1 = W - 40, y0 = CFG.STRIP_H + 40, y1 = H - 40;
-    const cx = clamp(nx, x0, x1), cy = clamp(ny, y0, y1);
-    dog.clampedT = (cx !== nx || cy !== ny) ? dog.clampedT + dt : 0;
-    dog.baseX += cx - nx; dog.baseY += cy - ny; // don't accumulate outside
-    dog.x = cx; dog.y = cy;
-    // face along the true velocity (heading + weave tilt)
-    const latV = A * w * Math.cos(w * dog.weaveT);
-    dog.angle = h + Math.atan2(latV, dog.speed);
+  // move the dog along his route polyline; returns true when he has
+  // run the whole route (out, turned, across, off the sideline)
+  function runRoute(dt) {
+    const r = round.route;
+    let remaining = dog.speed * dt;
+    let guard = 0;
+    while (remaining > 0 && r.seg < r.points.length - 1 && guard++ < 32) {
+      const b = r.points[r.seg + 1];
+      const d = dist(dog.x, dog.y, b.x, b.y);
+      if (d <= remaining + 0.001) {
+        dog.x = b.x; dog.y = b.y; r.seg++;
+        remaining -= d;
+      } else {
+        const k = remaining / d;
+        dog.x += (b.x - dog.x) * k;
+        dog.y += (b.y - dog.y) * k;
+        remaining = 0;
+      }
+    }
+    if (r.seg < r.points.length - 1) {
+      const b = r.points[r.seg + 1];
+      dog.angle = Math.atan2(b.y - dog.y, b.x - dog.x);
+    }
+    return r.seg >= r.points.length - 1;
   }
 
   /* ---------------- round flow ---------------- */
   function resetDog() {
     dog = { x: W / 2, y: H - CFG.LINEUP_Y, angle: -Math.PI / 2,
-            speed: dogSpeed(), base: dogSpeed(), phase: 0,
-            flipT: 0, shakeT: 0, heading: -Math.PI / 2,
-            baseX: W / 2, baseY: H - CFG.LINEUP_Y,
-            weaveT: rnd(0, 6.28), clampedT: 0 };
+            speed: dogSpeed(), phase: 0, flipT: 0, shakeT: 0 };
   }
 
   function resetFrisbee() {
     frisbee = { mode: "ready", x: 0, y: 0, sx: 0, sy: 0,
-                tx: 0, ty: 0, t: 0, dur: CFG.FLIGHT_T, spin: 0, trail: [] };
+                tx: 0, ty: 0, spin: 0, trail: [] };
   }
 
-  function newRound(forceHeading, skipReady) {
-    const sy = H - CFG.LINEUP_Y;
-    dog.x = W / 2; dog.y = sy;
-    dog.baseX = dog.x; dog.baseY = dog.y;
-    dog.heading = (forceHeading !== undefined && forceHeading !== null)
-      ? forceHeading : pickHeading();
-    dog.angle = dog.heading; // facing upfield
-    dog.base = dogSpeed();
-    dog.speed = dog.base;
-    dog.weaveT = rnd(0, 6.28);
-    dog.clampedT = 0;
+  function newRound(forceSide, forceTurnFrac, skipReady) {
+    dog.x = W / 2; dog.y = H - CFG.LINEUP_Y;
+    dog.angle = -Math.PI / 2; // facing upfield
+    dog.speed = dogSpeed();
     dog.flipT = 0; dog.shakeT = 0;
+    round.route = genRoute(forceSide, forceTurnFrac);
+    round.dots = sampleDots(round.route.points);
     round.phase = skipReady ? "running" : "ready";
     round.t = 0;
     round.thrown = false;
     round.result = null;
-    round.reactT = 0;
-    round.reacting = false;
     resetFrisbee();
   }
 
@@ -232,13 +243,9 @@
     f.sx = W / 2; f.sy = H - 24;               // launches from bottom center
     f.tx = clamp(x, 24, W - 24);
     f.ty = clamp(y, CFG.STRIP_H + 40, H - 40); // never above the UI strip
-    f.t = 0; f.dur = CFG.FLIGHT_T; f.spin = 0; f.trail = [];
+    f.spin = 0; f.trail = [];
     f.x = f.sx; f.y = f.sy;
     round.thrown = true;
-    // his read beat: usually quick, sometimes a slow "dang-it" read
-    round.reactT = (Math.random() < CFG.SLOW_REACT_CHANCE)
-      ? CFG.SLOW_REACT_T : CFG.REACT_T;
-    round.reacting = false;
     sndThrow();
   }
 
@@ -306,50 +313,22 @@
         sndWhistle(); // release!
       }
     } else if (ph === "running") {
+      // he runs his out-and-turn route no matter what — pure interception
+      const finished = runRoute(dt);
       const f = frisbee;
-      if (!round.thrown) {
-        // free run: no throw yet — he just runs his heading
-        moveFreeRun(dt);
-        if (round.t >= CFG.RUN_T || dog.clampedT > 0.5) {
-          // never threw: quiet reset, no penalty
-          round.result = "runoff";
-          round.phase = "return";
-          round.t = 0;
-        }
-      } else if (!round.reacting) {
-        // he keeps running his line while he "reads" the throw...
-        moveFreeRun(dt);
-        round.reactT -= dt;
-        if (round.reactT <= 0) {
-          // ...then locks onto the landing point and SPRINTS
-          round.reacting = true;
-          dog.speed = dog.base * CFG.SPRINT_MULT;
-        }
-      } else {
-        // sprint straight at the landing point; wait there if early
-        const dx = f.tx - dog.x, dy = f.ty - dog.y;
-        const d = Math.hypot(dx, dy);
-        if (d > 4) {
-          const step = Math.min(d, dog.speed * dt);
-          dog.x += dx / d * step;
-          dog.y += dy / d * step;
-          dog.angle = Math.atan2(dy, dx);
-        }
-        dog.baseX = dog.x; dog.baseY = dog.y;
-      }
       if (f.mode === "flying") {
-        f.t += dt;
-        const k = Math.min(1, f.t / f.dur);
-        // ease-out cubic: fast off the hand, dying at the end
-        const e = 1 - Math.pow(1 - k, 3);
-        f.x = f.sx + (f.tx - f.sx) * e;
-        f.y = f.sy + (f.ty - f.sy) * e;
-        f.spin += (14 - 12 * e) * dt; // spin decays through the flight
+        // constant-speed flight straight at the tap point
+        // (Passing Frenzy pass feel)
+        const dx = f.tx - f.x, dy = f.ty - f.y;
+        const d = Math.hypot(dx, dy);
+        const step = CFG.DISC_SPEED * dt;
+        f.spin += dt * 14;
         f.trail.push({ x: f.x, y: f.y, t: 0 });
         if (f.trail.length > 12) f.trail.shift();
         for (const tr of f.trail) tr.t += dt;
-        if (k >= 1) {
-          // landing: did he get there in time?
+        if (d <= step) {
+          f.x = f.tx; f.y = f.ty;
+          // landing: did he run under it?
           if (dist(dog.x, dog.y, f.tx, f.ty) < CFG.CATCH_R) {
             round.result = "catch";
             doCatch(); // sets f.mode = "caught"
@@ -358,7 +337,15 @@
             doMiss(f.tx, f.ty); // sets f.mode = "landed"
           }
           if (state === "play") { round.phase = "resolve"; round.t = 0; }
+        } else {
+          f.x += dx / d * step;
+          f.y += dy / d * step;
         }
+      } else if (finished) {
+        // never threw and he ran it all — quiet reset, no penalty
+        round.result = "runoff";
+        round.phase = "return";
+        round.t = 0;
       }
     } else if (ph === "resolve") {
       if (round.t >= CFG.RESOLVE_T) {
@@ -366,7 +353,7 @@
         round.t = 0;
       }
     } else if (ph === "return") {
-      // jog back to the lineup, then a fresh heading
+      // jog back to the lineup, then a fresh route
       const hx = W / 2, hy = H - CFG.LINEUP_Y;
       const d = dist(dog.x, dog.y, hx, hy);
       if (d < 12) {
@@ -436,27 +423,20 @@
     for (let i = 1; i < 8; i++) ctx.fillRect(0, i * H / 8 - 3, W, 6);
   }
 
-  // intent indicator (replaces the old route telegraph): 4 small paw
-  // dots ahead of the dog along his CURRENT heading, updated live,
-  // plus a soft dashed gold ring showing his sprint reach — the
-  // "catchable zone". Shown until the throw; then he's committed.
-  function drawIntent() {
+  // route telegraph: paw-print dots along his out-and-turn path,
+  // shown during the ready beat, fading out after the whistle.
+  // Gone once the disc is thrown — then it's all interception.
+  function drawTelegraph() {
     if (state !== "play") return;
-    if (round.phase !== "running" && round.phase !== "ready") return;
+    if (round.phase !== "ready" && round.phase !== "running") return;
     if (frisbee && frisbee.mode !== "ready") return;
-    const d = dog;
-    const dx = Math.cos(d.heading), dy = Math.sin(d.heading);
-    for (let i = 1; i <= 4; i++) {
-      drawPaw(d.x + dx * i * 30, d.y + dy * i * 30, 0.7, 0.55);
+    let alpha = 0.75;
+    if (round.phase === "running") {
+      // fade quickly once he's off — you read it during the beat
+      alpha = 0.75 * Math.max(0, 1 - round.t / 0.5);
+      if (alpha <= 0) return;
     }
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,210,63,0.5)";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([10, 8]);
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, zoneReach(), 0, 6.2832);
-    ctx.stroke();
-    ctx.restore();
+    for (const d of round.dots) drawPaw(d.x, d.y, 0.7, alpha);
   }
 
   // the top UI strip reads as "not the field" — taps here don't throw,
@@ -735,7 +715,7 @@
   function render() {
     drawField();
     drawStrip();
-    drawIntent();
+    drawTelegraph();
     if (dog) drawDog();
     drawFrisbee();
     for (const t of treats) drawTreat(t);
@@ -782,9 +762,8 @@
   newRound(); // lineup ready behind the title screen
   requestAnimationFrame(frame);
 
-  /* Test hook. `debug` exposes live objects so tests can set the dog's
-     heading, throw, and inspect the round — test-only, never used by
-     the game. */
+  /* Test hook. `debug` exposes live objects so tests can force routes,
+     throw, and inspect the round — test-only, never used by the game. */
   window.__dogTest = {
     get state() { return state; },
     get catches() { return catches; },
@@ -792,17 +771,15 @@
     debug: {
       dog: function () { return dog; },
       frisbee: function () { return frisbee; },
+      route: function () { return round.route; },
       phase: function () { return round.phase; },
-      heading: function () { return dog.heading; },
-      zoneR: function () { return zoneReach(); },
-      reacting: function () { return round.reacting; },
       thrown: function () { return round.thrown; },
       result: function () { return round.result; },
-      // start a fresh round with a forced heading (tests only).
-      // skipReady=true (default) puts the dog straight into his run.
-      forceHeading: function (hd, skipReady) {
+      // start a fresh round with a forced route (tests only).
+      // skipReady=true (default) puts the dog straight on his run.
+      forceRoute: function (side, turnFrac, skipReady) {
         if (state !== "play") startGame();
-        newRound(hd, skipReady === undefined ? true : skipReady);
+        newRound(side, turnFrac, skipReady === undefined ? true : skipReady);
       },
     },
     tap: function (x, y) { onTap(x, y); },

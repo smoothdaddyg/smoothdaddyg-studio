@@ -1,11 +1,11 @@
-/* Node test for Frisbee Dog v3 — "lead him" mechanics (window.__dogTest).
+/* Node test for Frisbee Dog v4 — "out and across" mechanics (window.__dogTest).
    Verifies: title tap starts (ready phase), taps ignored during ready,
-   taps inside the top UI strip don't throw, throw led inside the sprint
-   reach -> CATCH (disc visibly in his mouth), throw at 2x reach -> MISS
-   (disc stays on the grass, forgiving, no penalty), one throw per round,
-   dog diverts after the read beat (1.5x sprint straight at the landing
-   point), headings vary across rounds (upfield-biased, never scripted),
-   no-throw -> quiet reset, dog never enters the top strip, round cycling
+   taps inside the top UI strip don't throw, route shape (3 waypoints:
+   out deep, turn, across — turn depth in the 55-70% band, always clear
+   of the strip, sides mirrored), one throw per round, disc flies at
+   constant speed, lead-the-cross interception -> CATCH (disc visibly
+   in his mouth), throw where he isn't -> MISS (disc stays on the grass,
+   forgiving, no penalty), no-throw -> quiet reset, round cycling
    (resolve -> return -> ready), 10 catches -> win, PLAY AGAIN resets,
    and config sanity.
    Run: node tools/tests/frisbeedog.test.cjs */
@@ -59,44 +59,50 @@ function ok(name, cond) {
 
 const W = 400, H = 700;
 const CFG = F.cfg;
+const LINEUP = { x: W / 2, y: H - 90 }; // bottom-center
 
-// throw px ahead of the dog along his current heading
-function throwLead(px) {
-  const d = F.debug.dog();
-  const hd = F.debug.heading();
-  F.tap(d.x + Math.cos(hd) * px, d.y + Math.sin(hd) * px);
-}
 // step until the round phase becomes `want` (or give up after cap steps)
 function stepUntil(want, cap) {
-  for (let i = 0; i < (cap || 600); i++) {
+  for (let i = 0; i < (cap || 900); i++) {
     if (F.debug.phase() === want) return true;
     F.step(0.016);
   }
   return F.debug.phase() === want;
 }
-// step until the dog starts reacting to a throw
-function stepUntilReact(cap) {
-  for (let i = 0; i < (cap || 60); i++) {
-    if (F.debug.reacting()) return true;
-    F.step(0.016);
+
+// tap the interception point: solve for the spot on his cross leg where
+// the constant-speed disc and the dog arrive together. Bisection on
+// f(L) = dogTime(L) - discTime(L); f is monotonic on [0, 176] for the
+// game's speed range, and the tap x stays on-screen (<= W - 24).
+function tapIntercept() {
+  const d = F.debug.dog();
+  const r = F.debug.route();
+  const s = d.speed;
+  const yT = r.yTurn;
+  const lx = W / 2, ly = H - 24; // disc launch point
+  const t1 = (d.y - yT) / s;     // his remaining time to the turn
+  const Hh = ly - yT;
+  const f = (L) => (t1 + L / s) - Math.hypot(L, Hh) / CFG.DISC_SPEED;
+  let lo = 0, hi = 176;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) < 0) lo = mid; else hi = mid;
   }
-  return F.debug.reacting();
+  const L = (lo + hi) / 2;
+  F.tap(W / 2 + r.side * L, yT);
+  return L;
 }
 
 // ---- config sanity ----
 eq("win at 10 catches", CFG.WIN_CATCHES, 10);
-eq("dog is smaller now (32)", CFG.DOG_R, 32);
+eq("dog is small (32)", CFG.DOG_R, 32);
 eq("catch radius is generous (68)", CFG.CATCH_R, 68);
-eq("sprint multiplier 1.5", CFG.SPRINT_MULT, 1.5);
-eq("flight time 0.9s", CFG.FLIGHT_T, 0.9);
-eq("reaction beat 0.25s", CFG.REACT_T, 0.25);
-eq("slow read 0.55s", CFG.SLOW_REACT_T, 0.55);
-eq("slow read chance 10%", CFG.SLOW_REACT_CHANCE, 0.1);
+eq("dog is fast now (210)", CFG.DOG_SPEED, 210);
+eq("speed ramp +12 every 2, cap 260",
+  CFG.DOG_SPEED_UP === 12 && CFG.SPEED_EVERY === 2 && CFG.DOG_SPEED_MAX === 260, true);
+eq("disc at Passing Frenzy pass speed (225)", CFG.DISC_SPEED, 225);
 eq("top UI strip 120px", CFG.STRIP_H, 120);
-eq("max free run 4.5s", CFG.RUN_T, 4.5);
-eq("base speed 130, ramps +12/2, caps 230",
-  CFG.DOG_SPEED === 130 && CFG.DOG_SPEED_UP === 12 &&
-  CFG.SPEED_EVERY === 2 && CFG.DOG_SPEED_MAX === 230, true);
+eq("turn band 55-70%", CFG.TURN_MIN === 0.55 && CFG.TURN_MAX === 0.70, true);
 
 // ---- title -> play: ready phase ----
 eq("starts on title", F.state, "title");
@@ -110,15 +116,63 @@ eq("counter starts at 0", F.catches, 0);
 F.tap(200, 300);
 eq("ready-beat tap ignored (still ready)", F.debug.frisbee().mode, "ready");
 
+// ---- route shape: out deep, turn, across ----
+F.start();
+F.debug.forceRoute(1, 0.6);
+{
+  const r = F.debug.route();
+  eq("route side", r.side, 1);
+  eq("route has 3 waypoints", r.points.length, 3);
+  eq("starts at lineup x", r.points[0].x, LINEUP.x);
+  eq("starts at lineup y", r.points[0].y, LINEUP.y);
+  eq("runs straight up first", r.points[1].x, LINEUP.x);
+  const yBot = H - 90, yTop = CFG.STRIP_H + 60;
+  const loY = yBot - CFG.TURN_MAX * (yBot - yTop);
+  const hiY = yBot - CFG.TURN_MIN * (yBot - yTop);
+  ok("turn depth inside the 55-70% band", r.yTurn >= loY - 1 && r.yTurn <= hiY + 1);
+  eq("turn point matches yTurn", r.points[1].y, r.yTurn);
+  ok("turn is deep but clear of the strip", r.yTurn > CFG.STRIP_H + 40);
+  eq("turns across to the right sideline", r.points[2].x, W + 60);
+  eq("cross leg stays at turn height", r.points[2].y, r.yTurn);
+}
+F.debug.forceRoute(-1, 0.6);
+{
+  const r = F.debug.route();
+  eq("route side -1", r.side, -1);
+  eq("mirrors across to the left sideline", r.points[2].x, -60);
+  eq("cross leg stays at turn height (left)", r.points[2].y, r.yTurn);
+}
+
+// ---- routes are random every round, but always out-and-turn ----
+{
+  const sides = {};
+  let minY = Infinity, maxY = -Infinity;
+  const yBot = H - 90, yTop = CFG.STRIP_H + 60;
+  const loY = yBot - CFG.TURN_MAX * (yBot - yTop);
+  const hiY = yBot - CFG.TURN_MIN * (yBot - yTop);
+  for (let i = 0; i < 20; i++) {
+    F.debug.forceRoute();
+    const r = F.debug.route();
+    sides[r.side] = 1;
+    if (r.yTurn < minY) minY = r.yTurn;
+    if (r.yTurn > maxY) maxY = r.yTurn;
+    ok("random turn depth in band", r.yTurn >= loY - 1 && r.yTurn <= hiY + 1);
+    ok("random turn clear of strip", r.yTurn > CFG.STRIP_H + 40);
+    eq("random route has 3 waypoints", r.points.length, 3);
+  }
+  ok("both sides appear", !!sides[1] && !!sides[-1]);
+  ok("turn depths vary", maxY - minY > 20);
+}
+
 // ---- taps inside the top UI strip don't throw ----
 F.start();
-F.debug.forceHeading(-Math.PI / 2); // straight to running
+F.debug.forceRoute(1, 0.6); // straight to running
 F.tap(200, 60); // y < STRIP_H
 eq("strip tap ignored (frisbee still ready)", F.debug.frisbee().mode, "ready");
 eq("strip tap ignored (not thrown)", F.debug.thrown(), false);
 
 // ---- one throw per round ----
-throwLead(80);
+F.tap(300, 400);
 eq("first throw flies", F.debug.frisbee().mode, "flying");
 {
   const tx = F.debug.frisbee().tx;
@@ -126,101 +180,66 @@ eq("first throw flies", F.debug.frisbee().mode, "flying");
   eq("second tap ignored (target unchanged)", F.debug.frisbee().tx, tx);
 }
 
-// ---- throw led inside reach -> CATCH, disc in his mouth ----
+// ---- disc flies at constant speed ----
 F.start();
-F.debug.forceHeading(-Math.PI / 2); // straight up
+F.debug.forceRoute(1, 0.6);
+F.tap(300, 400); // far enough to still be flying after 1s
 {
-  const r = F.debug.zoneR();
-  ok("reach ring is positive and sane", r > 100 && r < 200);
+  const f0 = F.debug.frisbee();
+  const sx = f0.x, sy = f0.y;
+  for (let i = 0; i < 62; i++) F.step(0.016); // 0.992s
+  const f1 = F.debug.frisbee();
+  eq("disc still flying", f1.mode, "flying");
+  const covered = Math.hypot(f1.x - sx, f1.y - sy);
+  ok("disc covers ~225px in 1s (constant speed)", Math.abs(covered - 223) < 15);
 }
-throwLead(80); // well inside the reach ring
-for (let i = 0; i < 60; i++) F.step(0.016); // 0.96s > 0.9s flight
-eq("led throw inside reach -> CATCH", F.catches, 1);
-eq("catch -> resolve beat", F.debug.phase(), "resolve");
+
+// ---- lead-the-cross interception -> CATCH, disc in his mouth ----
+F.start();
+F.debug.forceRoute(1, 0.6);
+tapIntercept(); // solved: disc and dog arrive together on the cross leg
+for (let i = 0; i < 130; i++) F.step(0.016);
+eq("intercepted cross -> CATCH", F.catches, 1);
 eq("catch -> disc visibly in his mouth", F.debug.frisbee().mode, "caught");
-// round cycles: resolve -> return (jog back) -> ready (fresh heading)
-ok("round cycles back to ready", stepUntil("ready", 600));
+eq("catch -> resolve beat", F.debug.phase(), "resolve");
+ok("round cycles back to ready", stepUntil("ready", 900));
 eq("frisbee ready for the next round", F.debug.frisbee().mode, "ready");
 
-// ---- throw at 2x reach -> MISS, forgiving ----
+// ---- throw where he isn't -> MISS, forgiving ----
 F.start();
-F.debug.forceHeading(-Math.PI / 2);
-{
-  const r = F.debug.zoneR();
-  throwLead(r * 2); // way beyond what he can sprint to
-}
-for (let i = 0; i < 60; i++) F.step(0.016);
-eq("throw at 2x reach -> MISS (counter 0)", F.catches, 0);
-eq("miss -> resolve beat", F.debug.phase(), "resolve");
+F.debug.forceRoute(1, 0.6); // he goes up, then right
+F.tap(60, 500); // left side: nowhere near his path
+for (let i = 0; i < 90; i++) F.step(0.016);
+eq("throw off his path -> MISS (counter 0)", F.catches, 0);
 eq("miss -> disc stays on the grass", F.debug.frisbee().mode, "landed");
 eq("miss keeps game in play", F.state, "play");
-ok("miss cycles to a fresh round", stepUntil("ready", 600));
+ok("miss cycles to a fresh round", stepUntil("ready", 900));
 eq("still no penalty after the cycle", F.catches, 0);
 
-// ---- after the read beat the dog diverts: 1.5x sprint at the landing ----
+// ---- no-throw: he runs it all, quiet reset, no penalty ----
 F.start();
-F.debug.forceHeading(-Math.PI / 2);
-{
-  const d0 = F.debug.dog();
-  const base = d0.base;
-  const tx = d0.x + 100, ty = d0.y - 60; // off to his right and ahead
-  F.tap(tx, ty);
-  ok("throw registered", F.debug.thrown());
-  ok("dog reads the throw", stepUntilReact(60));
-  const s = F.debug.dog().speed;
-  ok("sprint speed is 1.5x base", Math.abs(s - base * 1.5) < 1);
-  const p0 = { x: F.debug.dog().x, y: F.debug.dog().y };
-  F.step(0.2);
-  const p1 = F.debug.dog();
-  const mvx = p1.x - p0.x, mvy = p1.y - p0.y;
-  const mv = Math.hypot(mvx, mvy);
-  ok("dog is moving", mv > 20);
-  const dx = tx - p0.x, dy = ty - p0.y;
-  const dot = (mvx * dx + mvy * dy) / (mv * Math.hypot(dx, dy));
-  ok("dog sprints straight at the landing point", dot > 0.95);
-  ok("sprint covers ~1.5x base speed", Math.abs(mv / 0.2 - base * 1.5) < base * 1.5 * 0.2);
-}
-
-// ---- headings vary across rounds: upfield-biased, never scripted ----
-{
-  const seen = [];
-  for (let i = 0; i < 20; i++) { F.start(); seen.push(F.debug.heading()); }
-  const up = -Math.PI / 2;
-  for (const h of seen) ok("heading within +/-80deg of up", Math.abs(h - up) <= 1.41);
-  const distinct = new Set(seen.map((h) => h.toFixed(3))).size;
-  ok("headings vary across rounds", distinct >= 4);
-  const upfield = seen.filter((h) => Math.abs(h - up) <= 0.87).length;
-  ok("headings are upfield-biased", upfield >= 10);
-}
-
-// ---- no-throw -> quiet reset, no penalty ----
-F.start();
-F.debug.forceHeading(-Math.PI / 2);
-ok("no-throw run cycles back to ready", stepUntil("ready", 700));
+F.debug.forceRoute(1, 0.6);
+ok("no-throw run cycles back to ready", stepUntil("ready", 900));
 eq("runoff: counter untouched", F.catches, 0);
 eq("runoff: frisbee ready", F.debug.frisbee().mode, "ready");
 eq("runoff: no catch spin", F.debug.dog().flipT, 0);
 eq("runoff: no miss shake", F.debug.dog().shakeT, 0);
 
-// ---- dog never enters the top strip ----
+// ---- interceptions stay catchable as he speeds up (ramp check) ----
 F.start();
-F.debug.forceHeading(-Math.PI / 2); // straight up: worst case
-{
-  let minY = Infinity;
-  for (let i = 0; i < 400; i++) {
-    F.step(0.016);
-    const y = F.debug.dog().y;
-    if (y < minY) minY = y;
-  }
-  ok("dog stays below the strip (y >= STRIP_H + 40)", minY >= CFG.STRIP_H + 40 - 1);
+for (let c = 0; c < 4; c++) {
+  F.debug.forceRoute(1, 0.55 + (c % 3) * 0.05);
+  tapIntercept();
+  for (let i = 0; i < 130; i++) F.step(0.016);
 }
+eq("4 ramped interceptions -> 4 catches", F.catches, 4);
 
 // ---- 10 catches -> WIN ----
 F.start();
 for (let c = 0; c < 10; c++) {
-  F.debug.forceHeading(-Math.PI / 2);
-  throwLead(80);
-  for (let i = 0; i < 60; i++) F.step(0.016);
+  F.debug.forceRoute(1, 0.55 + (c % 3) * 0.05);
+  tapIntercept();
+  for (let i = 0; i < 130; i++) F.step(0.016);
 }
 eq("10 catches -> win state", F.state, "win");
 eq("counter shows 10", F.catches, 10);
