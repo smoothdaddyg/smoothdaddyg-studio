@@ -18,7 +18,8 @@
   /* ---------------- tuning (all gameplay numbers live here) ---------------- */
   const CFG = {
     BLUE_COUNT: 6,        // visible blue players
-    RED_COUNT: 6,         // visible red players
+    RED_COUNT: 4,         // visible red players — fewer than blue; red was
+                          // too dominant at 6 (won 10-0 in ~36s of test play)
     PLAYER_R: 18,         // player body radius (px)
     CATCH_R: 30,          // catch/pickup radius — a touch bigger than the body
     SPEED_MIN: 40,        // blue speed px/s — wide range, some much faster
@@ -37,8 +38,6 @@
     THROWER_GRACE: 0.20,  // s before the thrower can re-catch their own pass
     CELEBRATE_T: 1.7,     // basket celebration (s)
     SPAWN_MARGIN: 36,     // players spawn/despawn this far off-screen
-    SPAWN_SAFE_Y: 60,    // red can't steal the blue carrier until it's this
-                         // far inside the court — no spawn-camping the reset
   };
 
   const canvas = document.getElementById("stage");
@@ -244,11 +243,11 @@
     if (ball.mode === "carried") {
       if (ball.carrier) { ball.x = ball.carrier.x; ball.y = ball.carrier.y; }
       if (state === "play" && ball.carrier && ball.carrier.team === "blue") {
-        // SPAWN PROTECTION — the fresh blue carrier enters from below the
-        // screen; red can't steal until the carrier is visibly in play on
-        // the court (past the bottom edge by SPAWN_SAFE_Y). Position-based,
-        // no timers: he has to get in play before he's stealable.
-        if (ball.carrier.y <= H - CFG.SPAWN_SAFE_Y) {
+        // RED NO-STEAL ZONE — reds can't take the ball until blue has
+        // brought it past their goal (the bottom basket). Position-based,
+        // no timers: no spawn-camping the fresh carrier at the bottom edge;
+        // blue always gets a fair bring-up before reds can steal.
+        if (ball.carrier.y < basketBottom.y) {
           // RED PROXIMITY STEAL — a red just has to get close, not touch.
           // Steal = instant 2 points for red, ball resets to blue at the bottom.
           for (const p of players) {

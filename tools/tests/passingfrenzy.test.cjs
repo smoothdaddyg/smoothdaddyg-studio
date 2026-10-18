@@ -121,7 +121,7 @@ ok("win score is 10", F.cfg.WIN_SCORE === 10);
 eq("steal radius is 48", F.cfg.STEAL_RADIUS, 48);
 eq("shot clock is 4.0s", F.cfg.SHOT_CLOCK, 4.0);
 eq("shot warn window is 0.5s", F.cfg.SHOT_WARN, 0.5);
-eq("spawn protection margin is 60", F.cfg.SPAWN_SAFE_Y, 60);
+eq("red count is 4 (blue outnumbers red)", F.cfg.RED_COUNT, 4);
 eq("red speed min matches blue (40)", F.cfg.RED_SPEED_MIN, 40);
 eq("red speed max matches blue (140)", F.cfg.RED_SPEED_MAX, 140);
 
@@ -138,14 +138,14 @@ ok("all red speeds within 40-140", allInRange);
 ok("red sprinters exist (some red faster than 120)", maxRed > 120);
 
 // PROXIMITY STEAL: red inside STEAL_RADIUS steals (no touch needed)
-// (carrier walked onto the court first — spawn protection blocks steals
-// while the fresh carrier is still entering from below the screen)
+// (carrier walked past red's goal first — the no-steal zone blocks steals
+// while blue is still bringing the ball up from below the bottom basket)
 F.start();
 parkReds();
 freezeAll();
 let carrier = F.debug.ball().carrier;
 ok("ball starts carried by blue", carrier && carrier.team === "blue");
-carrier.y -= F.cfg.SPAWN_MARGIN + F.cfg.SPAWN_SAFE_Y + 40; // visibly in play
+carrier.y -= 200; // past red's goal (bottom basket at H-108): stealable
 const thief = reds()[0];
 thief.x = carrier.x; thief.y = carrier.y; // distance 0 < 48
 const rsBefore = F.redScore;
@@ -163,41 +163,50 @@ ok("reset carrier is blue", postSteal && postSteal.team === "blue");
 ok("reset carrier enters from the bottom", postSteal && postSteal.y > 650);
 ok("reset carrier moves upward (coming up)", postSteal && postSteal.vy < 0);
 
-// NO STEAL just outside the radius (carrier on the court, past spawn protection)
+// NO STEAL just outside the radius (carrier past red's goal, stealable zone)
 F.start();
 parkReds();
 freezeAll();
 carrier = F.debug.ball().carrier;
-carrier.y -= F.cfg.SPAWN_MARGIN + F.cfg.SPAWN_SAFE_Y + 40; // visibly in play
+carrier.y -= 200; // past red's goal (bottom basket at H-108)
 const lurker = reds()[0];
-lurker.x = carrier.x + F.cfg.STEAL_RADIUS + 25;
-lurker.y = carrier.y;
+lurker.x = carrier.x;
+lurker.y = carrier.y + F.cfg.STEAL_RADIUS + 25; // 73px below — vertical offset
+                                               // avoids the x-clamp flake when
+                                               // the carrier spawns near an edge
 const rsBefore2 = F.redScore;
 for (let i = 0; i < 5; i++) F.step(0.016);
 eq("no steal outside radius", F.redScore, rsBefore2);
 eq("ball still carried by blue", F.ballMode, "carried");
 ok("carrier still has it", F.debug.ball().carrier === carrier);
 
-// SPAWN PROTECTION: no steal while the fresh blue carrier is still entering
-// from below the screen — red can't spawn-camp the reset
+// NO-STEAL ZONE: reds can't take the ball until blue brings it past their
+// goal (the bottom basket) — no spawn-camping the fresh carrier as it
+// enters from the bottom of the screen
 F.start();
 parkReds();
 freezeAll();
 carrier = F.debug.ball().carrier;
-const spawnY = carrier.y; // H + SPAWN_MARGIN — still off-screen, not in play
+const spawnY = carrier.y; // H + SPAWN_MARGIN — below red's goal line
 const camper = reds()[0];
 camper.x = carrier.x; camper.y = carrier.y; // right on top of the carrier
 const rsBefore3 = F.redScore;
 for (let i = 0; i < 10; i++) F.step(0.016);
-eq("no spawn-camp steal while entering", F.redScore, rsBefore3);
+eq("no steal below red's goal line", F.redScore, rsBefore3);
 eq("ball still carried by blue", F.ballMode, "carried");
 ok("carrier still has it", F.debug.ball().carrier === carrier);
-// ...but once the carrier is visibly on the court, the same proximity steals
-carrier.y = spawnY - F.cfg.SPAWN_MARGIN - F.cfg.SPAWN_SAFE_Y - 40; // past the in-play line
+// still safe just short of the line (sandbox H=700: basket line at 592)
+carrier.y = 600;
+camper.x = carrier.x; camper.y = carrier.y;
+for (let i = 0; i < 5; i++) F.step(0.016);
+eq("no steal just short of the goal line", F.redScore, rsBefore3);
+eq("ball still carried by blue", F.ballMode, "carried");
+// ...but once past their goal, the same proximity steals
+carrier.y = 580; // above the line: past red's goal
 camper.x = carrier.x; camper.y = carrier.y;
 const rsBefore4 = F.redScore;
 F.step(0.016);
-eq("steal fires once carrier is in play", F.redScore, rsBefore4 + 2);
+eq("steal fires once past red's goal", F.redScore, rsBefore4 + 2);
 
 // SHOT CLOCK: holding too long = turnover, NO red points, blue reset
 F.start();
@@ -258,7 +267,7 @@ parkReds();
 freezeAll();
 const passer2 = F.debug.ball().carrier;
 passer2.x = 200;
-passer2.y -= F.cfg.SPAWN_MARGIN + F.cfg.SPAWN_SAFE_Y + 40; // on the court, in play
+passer2.y -= 200; // past red's goal (bottom basket at H-108): stealable
 const lurker2 = reds()[0];
 lurker2.x = passer2.x + 20; lurker2.y = passer2.y; // 20px away — inside CATCH_R
 for (const p of reds().slice(1)) { p.x = 30; p.y = -400; }
@@ -301,7 +310,7 @@ wanderer.vx = 0; wanderer.vy = 100; wanderer.y = 690; // heading for the bottom 
 const wandererRef = wanderer;
 for (let i = 0; i < 30; i++) F.step(0.016); // 0.48s * 100px/s = 48px > 46px to the edge
 ok("bottom-exiting player is removed", !F.debug.players().includes(wandererRef));
-ok("roster replenished after bottom exit", F.players >= 12);
+ok("roster replenished after bottom exit", F.players >= 10);
 eq("still playing after bottom recycle", F.state, "play");
 
 // OFF-SCREEN RECYCLING (top): an up-moving red that exits the top edge
@@ -313,7 +322,7 @@ riser.vx = 0; riser.vy = -100; riser.y = 10; // heading for the top edge
 const riserRef = riser;
 for (let i = 0; i < 30; i++) F.step(0.016); // 48px up from y=10 -> -38 < -36 exits
 ok("top-exiting player is removed", !F.debug.players().includes(riserRef));
-ok("roster replenished after top exit", F.players >= 12);
+ok("roster replenished after top exit", F.players >= 10);
 eq("still playing after top recycle", F.state, "play");
 
 // CARRIER RUNOFF: a blue carrier that runs off the bottom resets to a fresh
