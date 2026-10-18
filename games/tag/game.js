@@ -1,12 +1,12 @@
 /* ============================================================
    TAG! YOU'RE IT — SmoothDaddyG (game #18)
-   Playground tag. YOU are IT — you wear the big bouncing star
-   badge. Drag anywhere and your kid runs toward your finger.
-   Five cute kids wander the grass slowly, giggling and
-   dawdling — they never run away fast and never tag back.
-   Touch a kid to TAG them: star burst, happy giggle, and they
-   sit down smiling with a little star. Fill all 5 star slots
-   at the top for the BIG celebration finale.
+   Real playground tag. The big bouncing star badge marks IT —
+   and IT passes to whoever gets tagged, just like the real game.
+   You start as IT: drag anywhere and your kid runs toward your
+   finger. Tag a friend and THEY become it — now they chase YOU
+   (and everybody else)! Get tagged and you're it again.
+   Friends you've tagged earn a star overhead; fill all 5 star
+   slots at the top for the BIG celebration finale.
    ONE interaction: drag anywhere. No timer, no fail state,
    no score — tapping or dragging wrongly does nothing bad.
    ============================================================ */
@@ -22,6 +22,16 @@
     KID_SPEED_MAX: 90,
     KID_TURN_MIN: 2,    // friends change direction every 2-4 s
     KID_TURN_MAX: 4,
+    IT_KID_SPEED: 170,  // the "it" kid chases hard — faster than fleeing
+                        // friends (120) but slower than you (260), so you
+                        // can dodge or chase as you like
+    KID_FLEE_SPEED: 120, // friends run from IT — quick, but you catch them
+    FLEE_R: 150,        // friends start running when IT gets this close
+    IT_PLAYER_BIAS: 0.7, // the "it" kid prefers chasing YOU (distance x0.7)
+                         // so you stay in the game — but sometimes tags a
+                         // friend instead, playground chaos
+    TAGBACK_GRACE: 2.0, // s after a tag before the new IT can tag back the
+                        // one who tagged them — real playground no-tag-backs
     TAG_R: 70,          // generous tag radius — be kind
     KID_R: 34,          // kid body size (px) — BIG, Fisher-Price chunky
     EDGE_M: 70,         // everyone stays this far inside the field
@@ -41,9 +51,15 @@
   // drag anywhere and the kid runs toward your finger
   let player = null;
 
-  // friends: {x, y, angle, speed, turnT, tagged, phase, color, skin, sitT}
-  // they wander slowly, never run away fast, never tag back
+  // friends: {x, y, angle, speed, turnT, starred, phase, color, skin}
+  // they dawdle around, run from IT, and chase hard when THEY are it
   let kids = [];
+
+  // who is IT: "player" or a kid index. The star badge marks them, and
+  // IT passes to whoever gets tagged — real playground rules.
+  let it = "player";
+  // no-tag-backs: {oldIt, newIt, t} — the new IT can't instantly tag back
+  let lastTag = null;
 
   // drag target: null when the finger is up
   let target = null;
@@ -103,6 +119,11 @@
     // happy giggle arpeggio
     audio.arp([740, 880, 1040, 1320], 0.07, "square", 0.10);
   }
+  function sndYoureIt() {
+    // "you're it!" — bright rising whistle when the badge comes to you
+    audio.tone(660, 0.09, { type: "sine", vol: 0.11, slideTo: 990 });
+    audio.tone(990, 0.12, { type: "sine", vol: 0.11, slideTo: 1480, when: 0.10 });
+  }
   function sndWin() {
     // big surprise-finale fanfare
     audio.arp([523, 659, 784, 1047, 784, 1047, 1319, 1568], 0.11, "square", 0.12);
@@ -130,18 +151,17 @@
         angle: rnd(0, 6.283),
         speed: rnd(CFG.KID_SPEED_MIN, CFG.KID_SPEED_MAX),
         turnT: rnd(CFG.KID_TURN_MIN, CFG.KID_TURN_MAX),
-        tagged: false,
+        starred: false, // YOU tagged them (counts toward the 5 slots)
         phase: rnd(0, 6.283),
         color: KID_COLORS[i % KID_COLORS.length],
         skin: SKINS[i % SKINS.length],
-        sitT: 0,
       });
     }
   }
 
-  function taggedCount() {
+  function starredCount() {
     let n = 0;
-    for (const k of kids) if (k.tagged) n++;
+    for (const k of kids) if (k.starred) n++;
     return n;
   }
 
@@ -149,6 +169,8 @@
     parts = []; rings = []; confetti = [];
     resetPlayer();
     resetKids();
+    it = "player"; // you start as IT, just like the title says
+    lastTag = null;
     state = "play";
     if (window.SDGplays) window.SDGplays.played("tag");
     sndGo();
@@ -160,14 +182,54 @@
     confettiBlast(W / 2, H * 0.4, 130);
   }
 
-  /* ---------------- tagging ---------------- */
-  function doTag(kid) {
-    kid.tagged = true;
-    kid.sitT = 0;
-    burst(kid.x, kid.y - 30, 45, 26, 300);
-    rings.push({ x: kid.x, y: kid.y - 20, r: 22, t: 0, life: 0.55, hue: 45 });
+  /* ---------------- tagging: IT passes to whoever gets tagged ---------------- */
+  // pass the star badge to the new IT, starting the no-tag-back grace
+  function passIt(oldIt, newIt) {
+    lastTag = { oldIt: oldIt, newIt: newIt, t: time };
+    it = newIt;
+  }
+
+  // playground no-tag-backs: the new IT can't instantly tag the one who
+  // just tagged them — the chase has to go somewhere new
+  function tagBlocked(actor, candidate) {
+    return !!(lastTag && actor === lastTag.newIt && candidate === lastTag.oldIt &&
+              (time - lastTag.t) < CFG.TAGBACK_GRACE);
+  }
+
+  function tagBurst(x, y) {
+    burst(x, y - 30, 45, 26, 300);
+    rings.push({ x: x, y: y - 20, r: 22, t: 0, life: 0.55, hue: 45 });
+  }
+
+  // YOU tag a friend: they earn your star (if first time) and become IT
+  function playerTagsKid(i) {
+    const k = kids[i];
+    tagBurst(k.x, k.y);
     sndTag();
-    if (taggedCount() >= CFG.KID_COUNT) winGame();
+    if (!k.starred) {
+      k.starred = true;
+      if (starredCount() >= CFG.KID_COUNT) {
+        passIt("player", i);
+        winGame();
+        return;
+      }
+    }
+    passIt("player", i);
+  }
+
+  // the IT kid tags YOU: you're IT again — go chase somebody!
+  function kidTagsPlayer() {
+    tagBurst(player.x, player.y);
+    sndYoureIt();
+    passIt(it, "player");
+  }
+
+  // the IT kid tags another friend: IT keeps bouncing around the playground
+  function kidTagsKid(i) {
+    const k = kids[i];
+    tagBurst(k.x, k.y);
+    sndTag();
+    passIt(it, i);
   }
 
   /* ---------------- input: drag anywhere ---------------- */
@@ -230,32 +292,94 @@
     player.y = clamp(player.y, 20, H - 20);
   }
 
+  function clampToField(k) {
+    // soft bounce off the field edges — always stay in bounds
+    const m = CFG.EDGE_M;
+    if (k.x < m) { k.x = m; k.angle = Math.PI - k.angle; }
+    if (k.x > W - m) { k.x = W - m; k.angle = Math.PI - k.angle; }
+    if (k.y < m) { k.y = m; k.angle = -k.angle; }
+    if (k.y > H - m) { k.y = H - m; k.angle = -k.angle; }
+  }
+
+  function itPos() {
+    // where is IT right now? (everyone runs from this spot)
+    return it === "player" ? player : kids[it];
+  }
+
   function tickKids(dt) {
-    for (const k of kids) {
+    const ip = itPos();
+    for (let i = 0; i < kids.length; i++) {
+      const k = kids[i];
       k.phase += dt * (3 + k.speed * 0.03);
-      if (k.tagged) { k.sitT += dt; continue; } // tagged friends sit out, smiling
-      k.turnT -= dt;
-      if (k.turnT <= 0) {
-        // dawdle off in a new direction — never a sprint, never at you
-        k.angle = rnd(0, 6.283);
-        k.turnT = rnd(CFG.KID_TURN_MIN, CFG.KID_TURN_MAX);
+      if (it === i) {
+        // THIS kid is IT — chase everybody! Nearest target wins, with a
+        // soft preference for you (x0.7) so you stay in the game.
+        let tx = player.x, ty = player.y;
+        let bd = dist(k.x, k.y, player.x, player.y) * CFG.IT_PLAYER_BIAS;
+        for (let j = 0; j < kids.length; j++) {
+          if (j === i) continue;
+          const o = kids[j];
+          const d = dist(k.x, k.y, o.x, o.y);
+          if (d < bd) { bd = d; tx = o.x; ty = o.y; }
+        }
+        const d = dist(k.x, k.y, tx, ty);
+        if (d > 4) {
+          const step = Math.min(d, CFG.IT_KID_SPEED * dt);
+          k.angle = Math.atan2(ty - k.y, tx - k.x);
+          k.x += (tx - k.x) / d * step;
+          k.y += (ty - k.y) / d * step;
+        }
+        clampToField(k);
+        continue;
       }
-      k.x += Math.cos(k.angle) * k.speed * dt;
-      k.y += Math.sin(k.angle) * k.speed * dt;
-      // soft bounce off the field edges — always stay in bounds
-      const m = CFG.EDGE_M;
-      if (k.x < m) { k.x = m; k.angle = Math.PI - k.angle; }
-      if (k.x > W - m) { k.x = W - m; k.angle = Math.PI - k.angle; }
-      if (k.y < m) { k.y = m; k.angle = -k.angle; }
-      if (k.y > H - m) { k.y = H - m; k.angle = -k.angle; }
+      // not it: run from IT when it gets close, dawdle otherwise
+      const d = dist(k.x, k.y, ip.x, ip.y);
+      if (d < CFG.FLEE_R) {
+        const a = Math.atan2(k.y - ip.y, k.x - ip.x);
+        k.angle = a;
+        k.x += Math.cos(a) * CFG.KID_FLEE_SPEED * dt;
+        k.y += Math.sin(a) * CFG.KID_FLEE_SPEED * dt;
+      } else {
+        k.turnT -= dt;
+        if (k.turnT <= 0) {
+          // dawdle off in a new direction — never a sprint, never at you
+          k.angle = rnd(0, 6.283);
+          k.turnT = rnd(CFG.KID_TURN_MIN, CFG.KID_TURN_MAX);
+        }
+        k.x += Math.cos(k.angle) * k.speed * dt;
+        k.y += Math.sin(k.angle) * k.speed * dt;
+      }
+      clampToField(k);
     }
   }
 
   function tickTags() {
-    for (const k of kids) {
-      if (!k.tagged && dist(player.x, player.y, k.x, k.y) < CFG.TAG_R) {
-        doTag(k);
-        if (state !== "play") return; // win stops further tagging
+    if (it === "player") {
+      // you're IT — tag a friend and THEY become it
+      for (let i = 0; i < kids.length; i++) {
+        const k = kids[i];
+        if (dist(player.x, player.y, k.x, k.y) < CFG.TAG_R &&
+            !tagBlocked("player", i)) {
+          playerTagsKid(i);
+          return;
+        }
+      }
+    } else {
+      const k = kids[it];
+      // the IT kid tags YOU — you're it again!
+      if (dist(k.x, k.y, player.x, player.y) < CFG.TAG_R &&
+          !tagBlocked(it, "player")) {
+        kidTagsPlayer();
+        return;
+      }
+      // ...or tags another friend — IT keeps bouncing around
+      for (let i = 0; i < kids.length; i++) {
+        if (i === it) continue;
+        const o = kids[i];
+        if (dist(k.x, k.y, o.x, o.y) < CFG.TAG_R && !tagBlocked(it, i)) {
+          kidTagsKid(i);
+          return;
+        }
       }
     }
   }
@@ -444,36 +568,20 @@
     ctx.lineWidth = 4; ctx.strokeStyle = "rgba(90,60,0,0.5)"; ctx.stroke();
     // head
     drawKidFace(0, -r * 0.35, r * 0.62, "#f6d3a8");
-    // THE star badge: big, bouncing, impossible to miss
-    const starBounce = Math.abs(Math.sin(player.phase * 1.3)) * 7;
-    ctx.save();
-    ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 22;
-    drawStar(0, -r * 1.55 - starBounce, 26, "#ffe45e", Math.sin(time * 2) * 0.15);
-    ctx.restore();
+    // THE star badge: big, bouncing, impossible to miss — but only while YOU are IT
+    if (it === "player") {
+      const starBounce = Math.abs(Math.sin(player.phase * 1.3)) * 7;
+      ctx.save();
+      ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 22;
+      drawStar(0, -r * 1.55 - starBounce, 26, "#ffe45e", Math.sin(time * 2) * 0.15);
+      ctx.restore();
+    }
     ctx.restore();
   }
 
-  function drawFriend(k) {
-    if (k.tagged) {
-      // tagged: sitting down, smiling, little star overhead
-      const bob = Math.abs(Math.sin(k.sitT * 3)) * 4;
-      ctx.save();
-      ctx.translate(k.x, k.y);
-      ctx.scale(1.15, 0.82); // sitting squish
-      ctx.fillStyle = "rgba(20,60,25,0.25)";
-      ctx.beginPath();
-      ctx.ellipse(0, CFG.KID_R * 1.0, CFG.KID_R * 0.9, CFG.KID_R * 0.26, 0, 0, 6.2832);
-      ctx.fill();
-      ctx.fillStyle = k.color;
-      ctx.beginPath(); ctx.arc(0, CFG.KID_R * 0.5, CFG.KID_R * 0.72, 0, 6.2832); ctx.fill();
-      ctx.lineWidth = 4; ctx.strokeStyle = "rgba(40,20,5,0.4)"; ctx.stroke();
-      drawKidFace(0, -CFG.KID_R * 0.25, CFG.KID_R * 0.62, k.skin);
-      ctx.restore();
-      drawStar(k.x, k.y - CFG.KID_R * 1.35 - bob, 15, "#ffe45e", Math.sin(time * 3 + k.phase) * 0.2);
-      return;
-    }
+  function drawFriend(k, idx) {
     const bounce = Math.abs(Math.sin(k.phase)) * 7;
-    // giggle wiggle while wandering
+    // giggle wiggle while wandering (the IT kid leans into the chase)
     const wig = Math.sin(k.phase * 2) * 0.06;
     ctx.save();
     ctx.translate(k.x, k.y);
@@ -481,6 +589,20 @@
     ctx.translate(-k.x, -k.y);
     drawKidBody(k, -bounce);
     ctx.restore();
+    if (it === idx) {
+      // THIS kid is IT — the star badge bounces overhead
+      const starBounce = Math.abs(Math.sin(k.phase * 1.3)) * 7;
+      ctx.save();
+      ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 22;
+      drawStar(k.x, k.y - CFG.KID_R * 1.55 - starBounce, 26, "#ffe45e",
+               Math.sin(time * 2 + k.phase) * 0.15);
+      ctx.restore();
+    } else if (k.starred) {
+      // friends you've tagged keep a little star — your progress, on the field
+      const bob = Math.abs(Math.sin(time * 3 + k.phase)) * 4;
+      drawStar(k.x, k.y - CFG.KID_R * 1.35 - bob, 15, "#ffe45e",
+               Math.sin(time * 3 + k.phase) * 0.2);
+    }
   }
 
   /* ---------------- drawing: HUD (star slots — visual progress, no numbers) ---------------- */
@@ -492,7 +614,7 @@
     let x0 = W / 2 - totalW / 2;
     // keep clear of the 84px back button (top-left)
     if (x0 - r < 120) x0 = 120 + r;
-    const got = taggedCount();
+    const got = starredCount();
     for (let i = 0; i < n; i++) {
       const x = x0 + i * gap;
       if (i < got) {
@@ -600,20 +722,17 @@
       ctx.translate(0, -jb);
       drawPlayer();
       ctx.restore();
-      for (const k of kids) {
+      for (let i = 0; i < kids.length; i++) {
+        const k = kids[i];
         const kj = Math.abs(Math.sin(time * 6 + k.phase)) * 22;
         ctx.save();
         ctx.translate(0, -kj);
-        // tagged friends pop back up to cheer
-        const wasTagged = k.tagged;
-        k.tagged = false;
-        drawFriend(k);
-        k.tagged = wasTagged;
+        drawFriend(k, i);
         ctx.restore();
       }
     } else {
       if (player) drawPlayer();
-      for (const k of kids) drawFriend(k);
+      for (let i = 0; i < kids.length; i++) drawFriend(kids[i], i);
     }
     drawParts();
     if (state !== "title") drawSlots();
@@ -670,7 +789,8 @@
   window.__tagTest = {
     get state() { return state; },
     get cfg() { return CFG; },
-    get tagged() { return taggedCount(); },
+    get starred() { return starredCount(); },
+    get it() { return it; }, // "player" or a kid index — who wears the badge
     debug: {
       player: function () { return player; },
       kids: function () { return kids; },
@@ -682,10 +802,10 @@
         setTarget(x, y);
       },
       release: function () { onUp(); },
-      // tag kid i directly (tests only)
+      // you tag kid i directly (tests only)
       forceTag: function (i) {
         if (state !== "play") startGame();
-        doTag(kids[i]);
+        playerTagsKid(i);
       },
       placePlayer: function (x, y) {
         if (state !== "play") startGame();
