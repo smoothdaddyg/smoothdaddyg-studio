@@ -27,15 +27,19 @@
                         // can dodge or chase as you like
     KID_FLEE_SPEED: 120, // friends run from IT — quick, but you catch them
     FLEE_R: 150,        // friends start running when IT gets this close
-    IT_PLAYER_BIAS: 0.7, // the "it" kid prefers chasing YOU (distance x0.7)
-                         // so you stay in the game — but sometimes tags a
-                         // friend instead, playground chaos
+    IT_PLAYER_BIAS: 0.5,  // the "it" kid prefers chasing YOU (distance x0.5)
+                         // so you stay in the game — but a friend right next
+                         // to them still gets tagged, playground chaos
     TAGBACK_GRACE: 2.0, // s after a tag before the new IT can tag back the
                         // one who tagged them — real playground no-tag-backs
+    TAG_COOLDOWN: 1.0,  // s after ANY tag before anyone can be tagged again —
+                        // "it counts" beat: breaks pile-up tag ping-pongs and
+                        // gives everyone (including you) a head start
     TAG_R: 70,          // generous tag radius — be kind
     KID_R: 34,          // kid body size (px) — BIG, Fisher-Price chunky
     EDGE_M: 70,         // everyone stays this far inside the field
     STAR_SLOTS: 5,      // star slots at the top (visual progress)
+    OBSTACLES: 3,       // solid playground equipment to chase around
   };
 
   const canvas = document.getElementById("stage");
@@ -60,6 +64,122 @@
   let it = "player";
   // no-tag-backs: {oldIt, newIt, t} — the new IT can't instantly tag back
   let lastTag = null;
+
+  // solid playground obstacles: {x, y, w, h, kind} — everyone runs AROUND
+  // them (circle-vs-rect push-out, so chases slide around corners).
+  // Tags stay pure distance (generous, forgiving) — only movement collides.
+  let obstacles = [];
+
+  function buildObstacles() {
+    obstacles = [
+      { kind: "slide", x: W * 0.08, y: H * 0.30, w: 130, h: 92 },
+      { kind: "dome",  x: W * 0.66, y: H * 0.52, w: 116, h: 84 },
+      { kind: "tree",  x: W * 0.30, y: H * 0.72, w: 76,  h: 76 },
+    ];
+  }
+
+  function insideObstacle(x, y, pad) {
+    pad = pad || 0;
+    for (const o of obstacles) {
+      if (x > o.x - pad && x < o.x + o.w + pad &&
+          y > o.y - pad && y < o.y + o.h + pad) return true;
+    }
+    return false;
+  }
+
+  // push a circle (kid/player body) out of every obstacle — slides around
+  function collideObstacles(p, r) {
+    for (const o of obstacles) {
+      const cx = clamp(p.x, o.x, o.x + o.w);
+      const cy = clamp(p.y, o.y, o.y + o.h);
+      const dx = p.x - cx, dy = p.y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d < r) {
+        if (d > 0.001) {
+          p.x = cx + dx / d * r;
+          p.y = cy + dy / d * r;
+        } else {
+          // center inside the rect: pop out the nearest face
+          const pl = p.x - o.x, pr = o.x + o.w - p.x;
+          const pt = p.y - o.y, pb = o.y + o.h - p.y;
+          const m = Math.min(pl, pr, pt, pb);
+          if (m === pl) p.x = o.x - r;
+          else if (m === pr) p.x = o.x + o.w + r;
+          else if (m === pt) p.y = o.y - r;
+          else p.y = o.y + o.h + r;
+        }
+      }
+    }
+  }
+
+  // do segments AB and CD intersect? (for obstacle line-of-sight)
+  // Intersections at the very start of AB (t ~ 0) don't count — that's
+  // just us standing on a waypoint corner, not a real blockage.
+  function segInt(ax, ay, bx, by, cx, cy, dx, dy) {
+    const d = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx);
+    if (Math.abs(d) < 1e-9) return false;
+    const t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / d;
+    const u = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / d;
+    return t > 1e-6 && t <= 1 && u >= 0 && u <= 1;
+  }
+
+  // steer k toward (tx,ty) at speed, swinging around obstacle corners
+  // instead of stalling on them. Returns true when the real target is
+  // reached. Detour corners are snapped to once close, so the next tick
+  // routes cleanly from the exact corner instead of hovering near it.
+  function steerAround(k, tx, ty, speed, dt) {
+    const wp = routeAround(k, tx, ty);
+    const isTarget = (wp.x === tx && wp.y === ty);
+    let d = dist(k.x, k.y, wp.x, wp.y);
+    if (!isTarget && d < 12) {
+      k.x = wp.x; k.y = wp.y;
+      d = 0;
+    }
+    if (isTarget && d < 4) return true; // arrived — happy stop
+    if (d > 0.5) {
+      const step = Math.min(d, speed * dt);
+      k.angle = Math.atan2(wp.y - k.y, wp.x - k.x);
+      k.x += (wp.x - k.x) / d * step;
+      k.y += (wp.y - k.y) / d * step;
+    }
+    return false;
+  }
+
+  // steer toward (tx,ty), routing around an obstacle corner when one sits
+  // directly in the way — so chases never deadlock head-on into the slide.
+  function routeAround(k, tx, ty) {
+    const pad = CFG.KID_R * 0.8; // matches the collision radius — no dead band
+    for (const o of obstacles) {
+      const x1 = o.x - pad, y1 = o.y - pad;
+      const x2 = o.x + o.w + pad, y2 = o.y + o.h + pad;
+      // inside the expanded rect (shouldn't happen — collision keeps us out,
+      // but resize can leave us here): head for the nearest edge to get out
+      if (k.x > x1 && k.x < x2 && k.y > y1 && k.y < y2) {
+        const dl = k.x - x1, dr = x2 - k.x, dt = k.y - y1, db = y2 - k.y;
+        const m = Math.min(dl, dr, dt, db);
+        if (m === dl) return { x: x1, y: k.y };
+        if (m === dr) return { x: x2, y: k.y };
+        if (m === dt) return { x: k.x, y: y1 };
+        return { x: k.x, y: y2 };
+      }
+      const blocked =
+        segInt(k.x, k.y, tx, ty, x1, y1, x2, y1) ||
+        segInt(k.x, k.y, tx, ty, x2, y1, x2, y2) ||
+        segInt(k.x, k.y, tx, ty, x2, y2, x1, y2) ||
+        segInt(k.x, k.y, tx, ty, x1, y2, x1, y1);
+      if (blocked) {
+        // swing around whichever corner shortens the trip most
+        let bx = x1, by = y1, bd = 1e9;
+        const corners = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+        for (const c of corners) {
+          const dd = dist(k.x, k.y, c[0], c[1]) + dist(c[0], c[1], tx, ty);
+          if (dd < bd) { bd = dd; bx = c[0]; by = c[1]; }
+        }
+        return { x: bx, y: by };
+      }
+    }
+    return { x: tx, y: ty };
+  }
 
   // drag target: null when the finger is up
   let target = null;
@@ -145,7 +265,7 @@
         x = rnd(CFG.EDGE_M, W - CFG.EDGE_M);
         y = rnd(CFG.EDGE_M + 90, H - CFG.EDGE_M); // clear of the star slots
         tries++;
-      } while (dist(x, y, W / 2, H / 2) < 170 && tries < 20);
+      } while ((dist(x, y, W / 2, H / 2) < 170 || insideObstacle(x, y, 45)) && tries < 100);
       kids.push({
         x: x, y: y,
         angle: rnd(0, 6.283),
@@ -282,14 +402,13 @@
   function tickPlayer(dt) {
     player.phase += dt * 10;
     if (!target) return;
-    const d = dist(player.x, player.y, target.x, target.y);
-    if (d < 4) { target = null; return; } // arrived — happy stop
-    const step = Math.min(d, CFG.PLAYER_SPEED * dt);
-    player.angle = Math.atan2(target.y - player.y, target.x - player.x);
-    player.x += (target.x - player.x) / d * step;
-    player.y += (target.y - player.y) / d * step;
+    // steer around obstacles so a straight drag never stalls on the slide
+    if (steerAround(player, target.x, target.y, CFG.PLAYER_SPEED, dt)) {
+      target = null; // arrived — happy stop
+    }
     player.x = clamp(player.x, 20, W - 20);
     player.y = clamp(player.y, 20, H - 20);
+    collideObstacles(player, CFG.KID_R * 0.8);
   }
 
   function clampToField(k) {
@@ -313,23 +432,22 @@
       k.phase += dt * (3 + k.speed * 0.03);
       if (it === i) {
         // THIS kid is IT — chase everybody! Nearest target wins, with a
-        // soft preference for you (x0.7) so you stay in the game.
+        // soft preference for you (x0.5) so you stay in the game.
+        // Grace-blocked friends are skipped (no sitting on someone you
+        // can't tag yet — the chase moves on), but you are always worth
+        // chasing: the it-kid stays on you even through the grace.
         let tx = player.x, ty = player.y;
         let bd = dist(k.x, k.y, player.x, player.y) * CFG.IT_PLAYER_BIAS;
         for (let j = 0; j < kids.length; j++) {
-          if (j === i) continue;
+          if (j === i || tagBlocked(i, j)) continue;
           const o = kids[j];
           const d = dist(k.x, k.y, o.x, o.y);
           if (d < bd) { bd = d; tx = o.x; ty = o.y; }
         }
-        const d = dist(k.x, k.y, tx, ty);
-        if (d > 4) {
-          const step = Math.min(d, CFG.IT_KID_SPEED * dt);
-          k.angle = Math.atan2(ty - k.y, tx - k.x);
-          k.x += (tx - k.x) / d * step;
-          k.y += (ty - k.y) / d * step;
-        }
+        // swing around the slide instead of stalling on it head-on
+        steerAround(k, tx, ty, CFG.IT_KID_SPEED, dt);
         clampToField(k);
+        collideObstacles(k, CFG.KID_R * 0.8);
         continue;
       }
       // not it: run from IT when it gets close, dawdle otherwise
@@ -350,10 +468,35 @@
         k.y += Math.sin(k.angle) * k.speed * dt;
       }
       clampToField(k);
+      collideObstacles(k, CFG.KID_R * 0.8);
+    }
+  }
+
+  // personal space: non-it kids don't pile up on each other (which used to
+  // fuel instant tag ping-pongs). The it-kid is exempt — it must get close.
+  function separateKids() {
+    const minD = 80; // just outside tag range, so tags still fire first
+    for (let i = 0; i < kids.length; i++) {
+      if (it === i) continue;
+      for (let j = i + 1; j < kids.length; j++) {
+        if (it === j) continue;
+        const a = kids[i], b = kids[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy);
+        if (d < minD && d > 0.01) {
+          const push = (minD - d) / 2;
+          const nx = dx / d, ny = dy / d;
+          a.x -= nx * push; a.y -= ny * push;
+          b.x += nx * push; b.y += ny * push;
+          clampToField(a); clampToField(b);
+        }
+      }
     }
   }
 
   function tickTags() {
+    // global cooldown: after any tag, everyone gets a breather
+    if (lastTag && (time - lastTag.t) < CFG.TAG_COOLDOWN) return;
     if (it === "player") {
       // you're IT — tag a friend and THEY become it
       for (let i = 0; i < kids.length; i++) {
@@ -390,6 +533,7 @@
     if (state === "play") {
       tickPlayer(dt);
       tickKids(dt);
+      separateKids();
       tickTags();
     } else if (state === "win") {
       // celebration: everyone jumps and cheers, confetti keeps falling
@@ -449,45 +593,95 @@
       ctx.fill();
       ctx.fillStyle = "rgba(255,255,255,0.5)";
     }
-    drawPlayground();
+    drawObstacles();
   }
 
-  // simple slide + swing set in the background (flat, muted — scenery only)
-  function drawPlayground() {
-    const sx = W - 150, sy = 150;
-    ctx.save();
-    ctx.globalAlpha = 0.55;
-    // swing set: A-frame + two swings
-    ctx.strokeStyle = "#7a5c3e"; ctx.lineWidth = 10; ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(sx - 70, sy + 60); ctx.lineTo(sx - 45, sy - 60);
-    ctx.moveTo(sx + 70, sy + 60); ctx.lineTo(sx + 45, sy - 60);
-    ctx.moveTo(sx - 45, sy - 60); ctx.lineTo(sx + 45, sy - 60);
-    ctx.stroke();
-    ctx.lineWidth = 4; ctx.strokeStyle = "#5d4630";
-    for (const off of [-20, 20]) {
+  // solid playground obstacles — chunky, flat, Fisher-Price. Everyone
+  // runs AROUND these (see collideObstacles); they're drawn under the kids.
+  function drawObstacles() {
+    for (const o of obstacles) {
+      // soft ground shadow
+      ctx.fillStyle = "rgba(20,60,25,0.28)";
       ctx.beginPath();
-      ctx.moveTo(sx + off, sy - 58); ctx.lineTo(sx + off, sy - 10);
-      ctx.stroke();
-      ctx.fillStyle = "#8a6a48";
-      ctx.fillRect(sx + off - 14, sy - 10, 28, 8);
+      ctx.ellipse(o.x + o.w / 2, o.y + o.h - 2, o.w * 0.55, 12, 0, 0, 6.2832);
+      ctx.fill();
+      if (o.kind === "slide") drawSlide(o);
+      else if (o.kind === "dome") drawDome(o);
+      else if (o.kind === "tree") drawTree(o);
     }
-    // slide: ladder + chute
-    const lx = 120, ly = 170;
-    ctx.lineWidth = 8; ctx.strokeStyle = "#7a5c3e";
+  }
+
+  function drawSlide(o) {
+    const x = o.x, y = o.y;
+    // ladder rails (left)
+    ctx.strokeStyle = "#7a5c3e"; ctx.lineWidth = 9; ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(lx - 30, ly + 50); ctx.lineTo(lx - 30, ly - 40);
-    ctx.moveTo(lx + 30, ly + 50); ctx.lineTo(lx + 30, ly - 40);
+    ctx.moveTo(x + 18, y + o.h); ctx.lineTo(x + 18, y + 12);
+    ctx.moveTo(x + 44, y + o.h); ctx.lineTo(x + 44, y + 12);
     ctx.stroke();
+    ctx.lineWidth = 6;
+    for (const ry of [30, 52, 74]) {
+      ctx.beginPath();
+      ctx.moveTo(x + 18, y + ry); ctx.lineTo(x + 44, y + ry);
+      ctx.stroke();
+    }
+    // platform
+    ctx.fillStyle = "#8a6a48";
+    ctx.fillRect(x + 10, y + 2, 52, 14);
+    // chute: red slide swooping down to the right
     ctx.fillStyle = "#c9563c";
     ctx.beginPath();
-    ctx.moveTo(lx + 30, ly - 40);
-    ctx.lineTo(lx + 110, ly + 50);
-    ctx.lineTo(lx + 80, ly + 50);
-    ctx.lineTo(lx, ly - 40);
+    ctx.moveTo(x + 58, y + 8);
+    ctx.lineTo(x + o.w - 6, y + o.h - 12);
+    ctx.lineTo(x + o.w - 28, y + o.h - 12);
+    ctx.lineTo(x + 44, y + 16);
     ctx.closePath();
     ctx.fill();
-    ctx.restore();
+    ctx.lineWidth = 4; ctx.strokeStyle = "rgba(90,30,15,0.5)";
+    ctx.stroke();
+  }
+
+  function drawDome(o) {
+    const cx = o.x + o.w / 2, base = o.y + o.h;
+    const r = o.w / 2;
+    // crisscross climbing bars
+    ctx.strokeStyle = "#4d7ea8"; ctx.lineWidth = 7; ctx.lineCap = "round";
+    for (let i = -2; i <= 2; i++) {
+      const a0 = Math.PI + (i + 2.5) * Math.PI / 5.5;
+      const a1 = Math.PI + (i - 0.5) * Math.PI / 5.5;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a0) * r, base + Math.sin(a0) * r * 0.9);
+      ctx.lineTo(cx + Math.cos(a1) * r, base + Math.sin(a1) * r * 0.9);
+      ctx.stroke();
+    }
+    // dome outline
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.ellipse(cx, base, r, r * 0.9, 0, Math.PI, 0);
+    ctx.stroke();
+    ctx.lineWidth = 4; ctx.strokeStyle = "rgba(30,60,90,0.5)";
+    ctx.beginPath();
+    ctx.ellipse(cx, base, r, r * 0.9, 0, Math.PI, 0);
+    ctx.stroke();
+  }
+
+  function drawTree(o) {
+    const cx = o.x + o.w / 2;
+    // trunk
+    ctx.fillStyle = "#7a5c3e";
+    ctx.fillRect(cx - 10, o.y + o.h * 0.35, 20, o.h * 0.65);
+    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(60,40,20,0.5)";
+    ctx.strokeRect(cx - 10, o.y + o.h * 0.35, 20, o.h * 0.65);
+    // leafy canopy (overhangs the trunk a little — pretty, not solid)
+    ctx.fillStyle = "#2f7d3a";
+    const blobs = [
+      [cx, o.y + 22, 30], [cx - 24, o.y + 36, 22], [cx + 24, o.y + 36, 22],
+    ];
+    for (const b of blobs) {
+      ctx.beginPath(); ctx.arc(b[0], b[1], b[2], 0, 6.2832); ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath(); ctx.arc(cx - 10, o.y + 14, 12, 0, 6.2832); ctx.fill();
   }
 
   /* ---------------- drawing: kids ---------------- */
@@ -755,13 +949,16 @@
     playBtn.x = W / 2; playBtn.y = H * 0.66;
     againBtn.r = 72;
     againBtn.x = W / 2; againBtn.y = H * 0.62;
+    buildObstacles();
     if (player) {
       player.x = clamp(player.x, 20, W - 20);
       player.y = clamp(player.y, 20, H - 20);
+      collideObstacles(player, CFG.KID_R * 0.8);
     }
     for (const k of kids) {
       k.x = clamp(k.x, CFG.EDGE_M, W - CFG.EDGE_M);
       k.y = clamp(k.y, CFG.EDGE_M, H - CFG.EDGE_M);
+      collideObstacles(k, CFG.KID_R * 0.8);
     }
   }
   window.addEventListener("resize", resize);
@@ -794,6 +991,7 @@
     debug: {
       player: function () { return player; },
       kids: function () { return kids; },
+      obstacles: function () { return obstacles; },
       target: function () { return target; },
       // drag to (x, y) exactly like a finger drag (tests only)
       drag: function (x, y) {

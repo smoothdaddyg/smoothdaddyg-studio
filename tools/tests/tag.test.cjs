@@ -177,7 +177,8 @@ T.step(0.016); // you tag kid 0 -> it = 0, your 1st star
 T.debug.placeKid(1, 230, 300); // friend right next to the it-kid
 T.debug.placePlayer(60, 620);  // you far away (beyond the chase bias)
 T.debug.placeKid(2, 340, 620); T.debug.placeKid(3, 60, 120); T.debug.placeKid(4, 340, 120);
-T.step(0.016);
+// the 1s tag cooldown runs first (it counts!), then the it-kid tags the friend
+for (let i = 0; i < 70 && T.it !== 1; i++) T.step(0.016);
 eq("it-kid tags the friend", T.it, 1);
 eq("kid tags earn no star", T.starred, 1);
 
@@ -190,6 +191,33 @@ for (let i = 0; i < 30; i++) T.step(0.016); // 0.5s
 const k0f = T.debug.kids()[0];
 const f1 = dist2(k0f.x, k0f.y, T.debug.player().x, T.debug.player().y);
 ok("friend flees from you", f1 > f0 + 20);
+
+// ---- obstacles: solid playground equipment to chase around ----
+T.start();
+const obs = T.debug.obstacles();
+eq("3 obstacles", obs.length, 3);
+ok("slide, dome, tree present",
+   obs.some((o) => o.kind === "slide") &&
+   obs.some((o) => o.kind === "dome") &&
+   obs.some((o) => o.kind === "tree"));
+ok("obstacles inside the field",
+   obs.every((o) => o.x >= 0 && o.y >= 90 && o.x + o.w <= W && o.y + o.h <= H));
+ok("no kid spawns inside an obstacle",
+   T.debug.kids().every((k) =>
+     !obs.some((o) => k.x > o.x - 40 && k.x < o.x + o.w + 40 &&
+                       k.y > o.y - 40 && k.y < o.y + o.h + 40)));
+
+// collision: dragging into an obstacle pushes you out (slides around)
+T.start();
+const slide = T.debug.obstacles().find((o) => o.kind === "slide");
+T.debug.placePlayer(slide.x + slide.w / 2, slide.y - 60); // just above it
+T.debug.drag(slide.x + slide.w / 2, slide.y + slide.h + 60); // drag straight through
+for (let i = 0; i < 60; i++) T.step(0.016); // ~1s
+const pp = T.debug.player();
+const inSlide = pp.x > slide.x - 20 && pp.x < slide.x + slide.w + 20 &&
+                pp.y > slide.y - 20 && pp.y < slide.y + slide.h + 20;
+ok("player doesn't end up inside the slide", !inSlide);
+ok("player still moves (slides around)", Math.abs(pp.y - (slide.y - 60)) > 10);
 
 // ---- wrong taps do nothing bad ----
 T.start();
