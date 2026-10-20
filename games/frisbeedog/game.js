@@ -19,16 +19,16 @@
     WIN_CATCHES: 10,    // first to this many catches wins
     DOG_R: 32,          // dog body size (px) — small, more field room
     CATCH_R: 68,        // generous catch radius — be kind
-    DOG_SPEED: 210,     // starting run speed px/s — fast!
+    DOG_SPEED: 240,     // starting run speed px/s — fast!
     DOG_SPEED_UP: 12,   // +px/s every SPEED_EVERY catches (gentle ramp)
     SPEED_EVERY: 2,
-    DOG_SPEED_MAX: 260, // cap
-    DISC_SPEED: 225,    // frisbee speed px/s — constant, Passing Frenzy pass feel
+    DOG_SPEED_MAX: 300, // cap
+    DISC_SPEED: 250,    // frisbee speed px/s — constant, Passing Frenzy pass feel
     STRIP_H: 120,       // top UI strip: taps, targets and the dog stay below it
-    RESOLVE_T: 1.3,     // celebration beat after catch / miss (longer so the outcome reads)
-    READY_T: 0.8,       // "ready" beat: paw-print telegraph, then the whistle
-    TURN_MIN: 0.55,     // turn happens 55–70% of the way out — deep, never shallow
-    TURN_MAX: 0.70,
+    RESOLVE_T: 1.0,     // celebration beat after catch / miss (snappy)
+    READY_T: 0.6,       // "ready" beat: paw-print telegraph, then the whistle
+    TURN_MIN: 0.35,     // turn happens 35–70% of the way out — sometimes
+    TURN_MAX: 0.70,     // shallow and quick, sometimes deep; never in the strip
     EDGE_M: 40,         // turn runs toward this sideline margin
     JOG_SPEED: 260,     // jog back to the lineup between rounds
     LINEUP_Y: 90,       // dog lines up this far from the bottom
@@ -43,6 +43,8 @@
   // state: 'title' | 'play' | 'win'
   let state = "title";
   let catches = 0;
+  let streak = 0;    // consecutive catches without a miss — 3+ = ON FIRE
+  let fireT = 0;     // "ON FIRE!" popup timer after a streak catch
 
   // the dog: {x,y,angle,speed,phase,flipT,shakeT}
   // angle = facing direction (radians, 0 = +x). Top-down: he rotates to
@@ -132,12 +134,11 @@
   }
 
   /* ---------------- routes ----------------
-     Out-and-turn, every round: the dog runs OUT deep (55–70% of the
-     way from the lineup to the top strip), TURNS, and runs ACROSS
-     toward a sideline and off. Side and turn depth are randomized,
-     but the shape is always the same — read the telegraph, then
-     intercept his path. */
-  function genRoute(forceSide, forceTurnFrac) {
+     Out-and-turn, every round — but the SHAPE varies: sometimes the
+     classic 90° turn across, sometimes a diagonal cut up-and-out,
+     sometimes a diagonal start. Side, depth, and shape are all
+     randomized — read the paw-print telegraph, then intercept. */
+  function genRoute(forceSide, forceTurnFrac, forceShape) {
     const side = (forceSide !== undefined && forceSide !== null)
       ? forceSide : (Math.random() < 0.5 ? -1 : 1);
     const yBot = H - CFG.LINEUP_Y;
@@ -146,12 +147,35 @@
       ? forceTurnFrac : rnd(CFG.TURN_MIN, CFG.TURN_MAX);
     const yTurn = yBot - frac * (yBot - yTop);
     const sx = W / 2;
-    const points = [
-      { x: sx, y: yBot },
-      { x: sx, y: yTurn },
-      { x: side > 0 ? W + 60 : -60, y: yTurn },
-    ];
-    return { side: side, yTurn: yTurn, points: points, seg: 0 };
+    const shape = (forceShape !== undefined && forceShape !== null)
+      ? forceShape : Math.floor(Math.random() * 3);
+    const offX = side > 0 ? W + 60 : -60;
+    let points;
+    if (shape === 0) {
+      // classic: straight up, 90° turn, across the field
+      points = [
+        { x: sx, y: yBot },
+        { x: sx, y: yTurn },
+        { x: offX, y: yTurn },
+      ];
+    } else if (shape === 1) {
+      // diagonal cut: up, then angle up-and-out toward the sideline
+      const yEnd = Math.max(yTop, yTurn - Math.abs(offX - sx) * 0.6);
+      points = [
+        { x: sx, y: yBot },
+        { x: sx, y: yTurn },
+        { x: offX, y: yEnd },
+      ];
+    } else {
+      // diagonal out: angled start, then straighten across
+      const xMid = sx + side * W * 0.30;
+      points = [
+        { x: sx, y: yBot },
+        { x: xMid, y: yTurn },
+        { x: offX, y: yTurn },
+      ];
+    }
+    return { side: side, yTurn: yTurn, points: points, seg: 0, shape: shape };
   }
 
   // paw-print dots sampled along the route polyline — the telegraph
@@ -206,12 +230,12 @@
                 tx: 0, ty: 0, spin: 0, trail: [] };
   }
 
-  function newRound(forceSide, forceTurnFrac, skipReady) {
+  function newRound(forceSide, forceTurnFrac, forceShape, skipReady) {
     dog.x = W / 2; dog.y = H - CFG.LINEUP_Y;
     dog.angle = -Math.PI / 2; // facing upfield
     dog.speed = dogSpeed();
     dog.flipT = 0; dog.shakeT = 0;
-    round.route = genRoute(forceSide, forceTurnFrac);
+    round.route = genRoute(forceSide, forceTurnFrac, forceShape);
     round.dots = sampleDots(round.route.points);
     round.phase = skipReady ? "running" : "ready";
     round.t = 0;
@@ -221,7 +245,7 @@
   }
 
   function startGame() {
-    catches = 0;
+    catches = 0; streak = 0; fireT = 0;
     parts = []; rings = []; treats = [];
     resetDog();
     newRound();
@@ -253,6 +277,7 @@
     // UNMISTAKABLE: the disc ends up in his mouth (drawn there — see
     // drawFrisbee), big star explosion, happy fanfare, big gold ring.
     catches++;
+    streak++;
     dog.speed = dogSpeed();
     dog.flipT = 0.55;                       // joyful spin
     frisbee.mode = "caught";
@@ -260,14 +285,21 @@
     audio.arp([523, 659, 784, 1047], 0.09, "square", 0.12); // happy fanfare
     confettiBlast(dog.x, dog.y - 50, 60);
     rings.push({ x: dog.x, y: dog.y - 30, r: 30, t: 0, life: 0.8, hue: 45 });
+    // streak heat: 3+ in a row and he's ON FIRE — bigger bang, popup
+    if (streak >= 3) {
+      fireT = 1.2;
+      confettiBlast(dog.x, dog.y - 50, 60 + streak * 15);
+      audio.arp([659, 784, 1047, 1319, 1568], 0.07, "square", 0.14);
+    }
     if (catches >= CFG.WIN_CATCHES) winGame();
   }
 
   function doMiss(x, y) {
     // CLEAR but forgiving: the disc STAYS on the grass where it landed
     // (drawn there — see drawFrisbee), the dog looks at it and does a
-    // soft head-shake. Nothing lost — no penalty, no streak reset,
-    // no sad sounds.
+    // soft head-shake. Nothing lost — no penalty, no sad sounds —
+    // except the streak cools off.
+    streak = 0;
     frisbee.mode = "landed";
     frisbee.x = x; frisbee.y = y;
     dog.angle = Math.atan2(y - dog.y, x - dog.x); // look at the missed disc
@@ -369,6 +401,7 @@
 
   function tick(dt) {
     time += dt;
+    if (fireT > 0) fireT -= dt;
 
     if (dog) {
       dog.phase += dt * (6 + dog.speed * 0.045);
@@ -721,8 +754,26 @@
     for (const t of treats) drawTreat(t);
     drawParts();
     if (state !== "title") drawProgress();
+    if (fireT > 0 && state === "play") drawFire();
     if (state === "title") drawTitle();
     else if (state === "win") drawWin();
+  }
+
+  // "ON FIRE!" streak popup — big flame text over the field
+  function drawFire() {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, fireT * 2);
+    const s = 1 + Math.sin(time * 10) * 0.05;
+    ctx.translate(W / 2, H * 0.38);
+    ctx.scale(s, s);
+    ctx.font = "28px 'Press Start 2P', monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ff9d2e";
+    ctx.fillText("ON FIRE!", 0, 0);
+    ctx.fillStyle = "#ffe14d";
+    ctx.fillText("ON FIRE!", 0, -2);
+    ctx.restore();
   }
 
   /* ---------------- layout ---------------- */
@@ -767,6 +818,8 @@
   window.__dogTest = {
     get state() { return state; },
     get catches() { return catches; },
+    get streak() { return streak; },
+    get fireT() { return fireT; },
     get cfg() { return CFG; },
     debug: {
       dog: function () { return dog; },
@@ -776,10 +829,11 @@
       thrown: function () { return round.thrown; },
       result: function () { return round.result; },
       // start a fresh round with a forced route (tests only).
-      // skipReady=true (default) puts the dog straight on his run.
-      forceRoute: function (side, turnFrac, skipReady) {
+      // shape: 0 classic, 1 diagonal cut, 2 diagonal out (omit = random).
+      // skipReady (default true) puts the dog straight on his run.
+      forceRoute: function (side, turnFrac, shape, skipReady) {
         if (state !== "play") startGame();
-        newRound(side, turnFrac, skipReady === undefined ? true : skipReady);
+        newRound(side, turnFrac, shape, skipReady === undefined ? true : skipReady);
       },
     },
     tap: function (x, y) { onTap(x, y); },

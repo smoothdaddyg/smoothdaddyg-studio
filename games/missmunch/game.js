@@ -32,21 +32,21 @@
   var COLS = 13, ROWS = 13;
   // # wall, . dot, o power pellet, P player start, G monster house,
   // - house door, space walkable (no dot)
-  // Small and simple on purpose: 1-block-thick walls, 3-wide corridors,
-  // a 3x3 grid with 9 intersections. No big open areas.
+  // A REAL maze: 1-wide corridors with walls on both sides, 1-block-thick
+  // walls, no open bands. Fully connected; every dot reachable.
   var MAZE_GRID = [
     "#############",
-    "#...........#",
-    "#.o.......o.#",
-    "#...........#",
-    "#...#...#...#",
-    "#...........#",
-    "#....GGG....#",
-    "#....---....#",
-    "#...#...#...#",
-    "#...........#",
-    "#.o...P...o.#",
-    "#...........#",
+    "#.#.#.#.#.#.#",
+    "#.o.#.#.#.o.#",
+    "#.#...#..#..#",
+    "#.#.#.#.#.#.#",
+    "#.#.#...#.#.#",
+    "#.#.#GGG#.#.#",
+    "#.#..---..#.#",
+    "#.#.#...#.#.#",
+    "#.#..#.#..#.#",
+    "#.o#.#P.#.o.#",
+    "#.#.......#.#",
     "#############",
   ];
   // monster house center (the middle G tile); the door is the row below
@@ -60,8 +60,8 @@
 
   function levelParams(l) {
     return {
-      ghostSpeed: 4.6 + 0.4 * (l - 1),    // monsters get faster every level
-      playerSpeed: 6.8,
+      ghostSpeed: 3.2 + 0.3 * (l - 1),    // calm pace — his daughter plays this
+      playerSpeed: 4.2,
       frightTime: 7 - 0.5 * (l - 1),      // power pellets wear off sooner
       releaseGap: Math.max(0.9, 2.4 - 0.4 * (l - 1)),
     };
@@ -455,7 +455,7 @@
           else if (g.y < HOUSE.y + 1.98) g.y += sp;
           else { g.y = HOUSE.y + 2; g.mode = "active"; g.dir = { x: 0, y: 1 }; }
         } else {
-          g.speed = (g.mode === "eyes" ? 11 : P.ghostSpeed) * (frightT > 0 && g.mode === "active" ? 0.72 : 1);
+          g.speed = (g.mode === "eyes" ? 7 : P.ghostSpeed) * (frightT > 0 && g.mode === "active" ? 0.72 : 1);
           stepEntity(g, dt, false);
           if (g.mode === "eyes" && Math.abs(g.x - HOUSE.x) < 0.25 && Math.abs(g.y - HOUSE.y) < 0.25) {
             g.x = HOUSE.x; g.y = HOUSE.y; g.mode = "leaving";
@@ -837,10 +837,10 @@
   function drawHUD() {
     // floating overlay HUD — the maze fills the whole screen underneath
     ctx.save();
-    // score pill, top-left
+    // score pill, top-right (clear of the back button, top-left)
     ctx.fillStyle = "rgba(6,8,28,0.62)";
-    roundRect(10, 10, 108, 40, 12); ctx.fill();
-    drawPixelNumber(ctx, Math.floor(shown), 64, 30, 4, "#ffffff", true);
+    roundRect(W - 118, 10, 108, 40, 12); ctx.fill();
+    drawPixelNumber(ctx, Math.floor(shown), W - 64, 30, 4, "#ffffff", true);
     // level pips, top-center
     var pw = LEVELS * 26;
     ctx.fillStyle = "rgba(6,8,28,0.62)";

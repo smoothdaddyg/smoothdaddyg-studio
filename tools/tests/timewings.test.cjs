@@ -108,5 +108,29 @@ for (let i = 0; i < 3600; i++) T._frame(1 / 60);
 ok("world scrolled (camera moved)", Math.abs(T._cam().y - yBefore) > 1000);
 eq("still playing after 60s drift", T._state(), "play");
 
+// 8. THE thumb stick: anchored at the BOTTOM, tilt steers the plane —
+//    the finger never has to cover the plane in the middle.
+const home = T._stickPos().home;
+eq("stick home is at the bottom", home.y, 768 - 118);
+eq("stick home is centered", home.x, 512);
+T._setPlayer(0, 0, 0);                     // heading east
+T._stick(512, 650, 512, 590);              // thumb at the bottom, tilted UP
+for (let i = 0; i < 60; i++) T._frame(1 / 60);
+T._undrag();
+ok("stick tilt up -> nose swings north", Math.abs(T._player().hd - (-Math.PI / 2)) < 0.4);
+const sp = T._stickPos();
+ok("stick released -> inactive", !sp.active);
+// dead zone: a tiny tilt doesn't turn the plane
+T._setPlayer(0, 0, 0);
+T._stick(512, 650, 518, 644);              // 8px tilt — inside the dead zone
+for (let i = 0; i < 30; i++) T._frame(1 / 60);
+T._undrag();
+ok("tiny tilt inside dead zone -> heading holds", Math.abs(T._player().hd) < 0.001);
+// knob clamps to the stick radius
+T._stick(512, 650, 512, 100);
+const clamped = T._stickPos();
+ok("knob clamps to the base radius", Math.hypot(clamped.kx - 512, clamped.ky - 650) <= 92.5);
+T._undrag();
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

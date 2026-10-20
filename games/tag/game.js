@@ -1,14 +1,12 @@
 /* ============================================================
    TAG! YOU'RE IT — SmoothDaddyG (game #18)
-   Real playground tag. The big bouncing star badge marks IT —
-   and IT passes to whoever gets tagged, just like the real game.
-   You start as IT: drag anywhere and your kid runs toward your
-   finger. Tag a friend and THEY become it — now they chase YOU
-   (and everybody else)! Get tagged and you're it again.
-   Friends you've tagged earn a star overhead; fill all 5 star
-   slots at the top for the BIG celebration finale.
-   ONE interaction: drag anywhere. No timer, no fail state,
-   no score — tapping or dragging wrongly does nothing bad.
+   Real playground tag, kept simple. The big bouncing star badge
+   marks IT — and IT passes to whoever gets tagged.
+   You start as IT. Everybody runs from you. Catch someone on
+   the slide and THEY'RE it — now run, because they chase whoever
+   is closest, and that might be you. Tag anybody, anybody can
+   tag you. When the timer runs out, whoever is IT is the loser.
+   ONE interaction: drag anywhere. That's all there is to it.
    ============================================================ */
 
 (function () {
@@ -17,6 +15,7 @@
   /* ---------------- tuning (all gameplay numbers live here) ---------------- */
   const CFG = {
     KID_COUNT: 5,       // friends to tag
+    ROUND_T: 60,        // seconds on the clock — whoever is IT at 0 loses
     PLAYER_SPEED: 260,  // your kid runs toward your finger, px/s
     KID_SPEED_MIN: 60,  // friends dawdle — always slower than you
     KID_SPEED_MAX: 90,
@@ -27,18 +26,12 @@
                         // can dodge or chase as you like
     KID_FLEE_SPEED: 120, // friends run from IT — quick, but you catch them
     FLEE_R: 150,        // friends start running when IT gets this close
-    IT_PLAYER_BIAS: 0.5,  // the "it" kid prefers chasing YOU (distance x0.5)
-                         // so you stay in the game — but a friend right next
-                         // to them still gets tagged, playground chaos
-    TAGBACK_GRACE: 2.0, // s after a tag before the new IT can tag back the
-                        // one who tagged them — real playground no-tag-backs
-    TAG_COOLDOWN: 1.0,  // s after ANY tag before anyone can be tagged again —
-                        // "it counts" beat: breaks pile-up tag ping-pongs and
-                        // gives everyone (including you) a head start
+    TAG_COOLDOWN: 0.8,  // s after a tag before anyone can be tagged again —
+                        // the "it counts" beat: tagger gets a head start,
+                        // then the new IT can tag anybody
     TAG_R: 70,          // generous tag radius — be kind
     KID_R: 34,          // kid body size (px) — BIG, Fisher-Price chunky
     EDGE_M: 70,         // everyone stays this far inside the field
-    STAR_SLOTS: 5,      // star slots at the top (visual progress)
     OBSTACLES: 3,       // solid playground equipment to chase around
   };
 
@@ -48,22 +41,26 @@
 
   let W = 0, H = 0, DPR = 1, time = 0;
 
-  // state: 'title' | 'play' | 'win'
+  // state: 'title' | 'play' | 'end'
   let state = "title";
 
   // the tagger: {x, y, angle, phase, target:{x,y}|null}
   // drag anywhere and the kid runs toward your finger
   let player = null;
 
-  // friends: {x, y, angle, speed, turnT, starred, phase, color, skin}
-  // they dawdle around, run from IT, and chase hard when THEY are it
+  // friends: {x, y, angle, speed, turnT, phase, color, skin}
+  // they dawdle around, run from IT (and get caught up on the slide!),
+  // and chase hard when THEY are it
   let kids = [];
 
   // who is IT: "player" or a kid index. The star badge marks them, and
   // IT passes to whoever gets tagged — real playground rules.
   let it = "player";
-  // no-tag-backs: {oldIt, newIt, t} — the new IT can't instantly tag back
+  // last tag {newIt, t} — the brief "it counts" beat before anyone can
+  // be tagged again, so the tagger gets a head start
   let lastTag = null;
+  // the clock: seconds left in the round. At 0, whoever is IT loses.
+  let roundT = CFG.ROUND_T;
 
   // solid playground obstacles: {x, y, w, h, kind} — everyone runs AROUND
   // them (circle-vs-rect push-out, so chases slide around corners).
@@ -248,6 +245,11 @@
     // big surprise-finale fanfare
     audio.arp([523, 659, 784, 1047, 784, 1047, 1319, 1568], 0.11, "square", 0.12);
   }
+  function sndOops() {
+    // gentle "you're it at the buzzer" — soft, not sad; play again!
+    audio.tone(392, 0.15, { type: "sine", vol: 0.10, slideTo: 330 });
+    audio.tone(330, 0.2, { type: "sine", vol: 0.10, slideTo: 262, when: 0.16 });
+  }
 
   /* ---------------- setup ---------------- */
   function resetPlayer() {
@@ -263,7 +265,7 @@
       let x = 0, y = 0, tries = 0;
       do {
         x = rnd(CFG.EDGE_M, W - CFG.EDGE_M);
-        y = rnd(CFG.EDGE_M + 90, H - CFG.EDGE_M); // clear of the star slots
+        y = rnd(CFG.EDGE_M + 90, H - CFG.EDGE_M); // clear of the timer bar
         tries++;
       } while ((dist(x, y, W / 2, H / 2) < 170 || insideObstacle(x, y, 45)) && tries < 100);
       kids.push({
@@ -271,18 +273,11 @@
         angle: rnd(0, 6.283),
         speed: rnd(CFG.KID_SPEED_MIN, CFG.KID_SPEED_MAX),
         turnT: rnd(CFG.KID_TURN_MIN, CFG.KID_TURN_MAX),
-        starred: false, // YOU tagged them (counts toward the 5 slots)
         phase: rnd(0, 6.283),
         color: KID_COLORS[i % KID_COLORS.length],
         skin: SKINS[i % SKINS.length],
       });
     }
-  }
-
-  function starredCount() {
-    let n = 0;
-    for (const k of kids) if (k.starred) n++;
-    return n;
   }
 
   function startGame() {
@@ -291,29 +286,24 @@
     resetKids();
     it = "player"; // you start as IT, just like the title says
     lastTag = null;
+    roundT = CFG.ROUND_T;
     state = "play";
     if (window.SDGplays) window.SDGplays.played("tag");
     sndGo();
   }
 
-  function winGame() {
-    state = "win";
-    sndWin();
-    confettiBlast(W / 2, H * 0.4, 130);
+  function endGame() {
+    // the clock hit 0: whoever is IT loses.
+    state = "end";
+    if (it === "player") sndOops(); // gentle — you're it, play again!
+    else { sndWin(); confettiBlast(W / 2, H * 0.4, 130); }
   }
 
   /* ---------------- tagging: IT passes to whoever gets tagged ---------------- */
-  // pass the star badge to the new IT, starting the no-tag-back grace
-  function passIt(oldIt, newIt) {
-    lastTag = { oldIt: oldIt, newIt: newIt, t: time };
+  // pass the star badge to the new IT, starting the brief "it counts" beat
+  function passIt(newIt) {
+    lastTag = { newIt: newIt, t: time };
     it = newIt;
-  }
-
-  // playground no-tag-backs: the new IT can't instantly tag the one who
-  // just tagged them — the chase has to go somewhere new
-  function tagBlocked(actor, candidate) {
-    return !!(lastTag && actor === lastTag.newIt && candidate === lastTag.oldIt &&
-              (time - lastTag.t) < CFG.TAGBACK_GRACE);
   }
 
   function tagBurst(x, y) {
@@ -321,27 +311,19 @@
     rings.push({ x: x, y: y - 20, r: 22, t: 0, life: 0.55, hue: 45 });
   }
 
-  // YOU tag a friend: they earn your star (if first time) and become IT
+  // YOU tag a friend: they're IT now — run!
   function playerTagsKid(i) {
     const k = kids[i];
     tagBurst(k.x, k.y);
     sndTag();
-    if (!k.starred) {
-      k.starred = true;
-      if (starredCount() >= CFG.KID_COUNT) {
-        passIt("player", i);
-        winGame();
-        return;
-      }
-    }
-    passIt("player", i);
+    passIt(i);
   }
 
-  // the IT kid tags YOU: you're IT again — go chase somebody!
+  // the IT kid tags YOU: you're IT — go chase somebody!
   function kidTagsPlayer() {
     tagBurst(player.x, player.y);
     sndYoureIt();
-    passIt(it, "player");
+    passIt("player");
   }
 
   // the IT kid tags another friend: IT keeps bouncing around the playground
@@ -349,7 +331,7 @@
     const k = kids[i];
     tagBurst(k.x, k.y);
     sndTag();
-    passIt(it, i);
+    passIt(i);
   }
 
   /* ---------------- input: drag anywhere ---------------- */
@@ -361,7 +343,7 @@
   function onDown(x, y) {
     if (audio.unlock) audio.unlock();
     if (state === "title") { startGame(); return; }
-    if (state === "win") {
+    if (state === "end") {
       if (dist(x, y, againBtn.x, againBtn.y) <= againBtn.r) startGame();
       return;
     }
@@ -431,15 +413,12 @@
       const k = kids[i];
       k.phase += dt * (3 + k.speed * 0.03);
       if (it === i) {
-        // THIS kid is IT — chase everybody! Nearest target wins, with a
-        // soft preference for you (x0.5) so you stay in the game.
-        // Grace-blocked friends are skipped (no sitting on someone you
-        // can't tag yet — the chase moves on), but you are always worth
-        // chasing: the it-kid stays on you even through the grace.
+        // THIS kid is IT — chase whoever is CLOSEST (you or a friend),
+        // no favorites. Tag anybody.
         let tx = player.x, ty = player.y;
-        let bd = dist(k.x, k.y, player.x, player.y) * CFG.IT_PLAYER_BIAS;
+        let bd = dist(k.x, k.y, player.x, player.y);
         for (let j = 0; j < kids.length; j++) {
-          if (j === i || tagBlocked(i, j)) continue;
+          if (j === i) continue;
           const o = kids[j];
           const d = dist(k.x, k.y, o.x, o.y);
           if (d < bd) { bd = d; tx = o.x; ty = o.y; }
@@ -495,14 +474,14 @@
   }
 
   function tickTags() {
-    // global cooldown: after any tag, everyone gets a breather
+    // the "it counts" beat: after a tag, nobody can be tagged for a
+    // moment — the tagger gets a head start, then IT can tag anybody
     if (lastTag && (time - lastTag.t) < CFG.TAG_COOLDOWN) return;
     if (it === "player") {
       // you're IT — tag a friend and THEY become it
       for (let i = 0; i < kids.length; i++) {
         const k = kids[i];
-        if (dist(player.x, player.y, k.x, k.y) < CFG.TAG_R &&
-            !tagBlocked("player", i)) {
+        if (dist(player.x, player.y, k.x, k.y) < CFG.TAG_R) {
           playerTagsKid(i);
           return;
         }
@@ -510,8 +489,7 @@
     } else {
       const k = kids[it];
       // the IT kid tags YOU — you're it again!
-      if (dist(k.x, k.y, player.x, player.y) < CFG.TAG_R &&
-          !tagBlocked(it, "player")) {
+      if (dist(k.x, k.y, player.x, player.y) < CFG.TAG_R) {
         kidTagsPlayer();
         return;
       }
@@ -519,7 +497,7 @@
       for (let i = 0; i < kids.length; i++) {
         if (i === it) continue;
         const o = kids[i];
-        if (dist(k.x, k.y, o.x, o.y) < CFG.TAG_R && !tagBlocked(it, i)) {
+        if (dist(k.x, k.y, o.x, o.y) < CFG.TAG_R) {
           kidTagsKid(i);
           return;
         }
@@ -531,11 +509,13 @@
     time += dt;
 
     if (state === "play") {
+      roundT -= dt;
+      if (roundT <= 0) { roundT = 0; endGame(); return; }
       tickPlayer(dt);
       tickKids(dt);
       separateKids();
       tickTags();
-    } else if (state === "win") {
+    } else if (state === "end") {
       // celebration: everyone jumps and cheers, confetti keeps falling
       for (const k of kids) k.phase += dt * 9;
       player.phase += dt * 9;
@@ -791,37 +771,27 @@
       drawStar(k.x, k.y - CFG.KID_R * 1.55 - starBounce, 26, "#ffe45e",
                Math.sin(time * 2 + k.phase) * 0.15);
       ctx.restore();
-    } else if (k.starred) {
-      // friends you've tagged keep a little star — your progress, on the field
-      const bob = Math.abs(Math.sin(time * 3 + k.phase)) * 4;
-      drawStar(k.x, k.y - CFG.KID_R * 1.35 - bob, 15, "#ffe45e",
-               Math.sin(time * 3 + k.phase) * 0.2);
     }
   }
 
-  /* ---------------- drawing: HUD (star slots — visual progress, no numbers) ---------------- */
+  /* ---------------- drawing: HUD (the clock — visual, no reading) ---------------- */
+  // A draining bar across the top + the seconds left. When the bar is
+  // gone, time's up and whoever is IT loses. The last 10 seconds the bar
+  // turns red and pulses — uh oh!
   function drawSlots() {
-    const n = CFG.STAR_SLOTS;
-    const r = 20, gap = 56;
-    const totalW = (n - 1) * gap;
-    const y = 46;
-    let x0 = W / 2 - totalW / 2;
-    // keep clear of the 84px back button (top-left)
-    if (x0 - r < 120) x0 = 120 + r;
-    const got = starredCount();
-    for (let i = 0; i < n; i++) {
-      const x = x0 + i * gap;
-      if (i < got) {
-        ctx.save();
-        ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 14;
-        drawStar(x, y, r, "#ffe45e", Math.sin(time * 3 + i) * 0.12);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = "rgba(10,40,20,0.45)";
-        ctx.beginPath(); ctx.arc(x, y, r + 6, 0, 6.2832); ctx.fill();
-        drawStar(x, y, r, null);
-      }
-    }
+    const frac = clamp(roundT / CFG.ROUND_T, 0, 1);
+    const bw = W - 240, bh = 16;
+    const bx = 112, by = 18; // clear of the back button (top-left)
+    // bar track
+    ctx.fillStyle = "rgba(6,8,28,0.55)";
+    roundRect(bx - 6, by - 6, bw + 12, bh + 12, 12); ctx.fill();
+    // draining bar
+    const urgent = roundT <= 10;
+    ctx.fillStyle = urgent ? (Math.sin(time * 8) > 0 ? "#ff5a5a" : "#ff8a5a") : "#ffd23f";
+    if (frac > 0) { roundRect(bx, by, Math.max(4, bw * frac), bh, 8); ctx.fill(); }
+    // seconds left, right of the bar
+    drawPixelNumber(ctx, Math.ceil(roundT), bx + bw + 34, by + bh / 2, 5,
+                    urgent ? "#ff8a5a" : "#ffffff", true);
   }
 
   /* ---------------- drawing: buttons ---------------- */
@@ -868,8 +838,10 @@
     drawTriangleButton(playBtn, "#22d3ee");
   }
 
-  function drawWin() {
-    ctx.fillStyle = "rgba(10,40,25,0.30)";
+  function drawEnd() {
+    // the clock ran out: whoever is IT loses.
+    const youLose = it === "player";
+    ctx.fillStyle = youLose ? "rgba(40,10,25,0.30)" : "rgba(10,40,25,0.30)";
     ctx.fillRect(0, 0, W, H);
     // star shower badge
     ctx.save();
@@ -877,7 +849,22 @@
     drawStar(W / 2, H * 0.2 - Math.abs(Math.sin(time * 3)) * 14, 46,
              "#ffe45e", Math.sin(time * 2.2) * 0.15);
     ctx.restore();
-    drawTriangleButton(againBtn, "#ffd23f");
+    // the verdict — big and unmissable, no reading skill needed
+    ctx.textAlign = "center";
+    ctx.font = "34px 'Press Start 2P', monospace";
+    ctx.strokeStyle = "rgba(60,40,0,0.9)"; ctx.lineWidth = 7;
+    if (youLose) {
+      // you're IT at the buzzer — gentle, play again!
+      ctx.fillStyle = "#ff8a8a";
+      ctx.strokeText("YOU'RE IT!", W / 2, H * 0.42);
+      ctx.fillText("YOU'RE IT!", W / 2, H * 0.42);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeText("YOU WIN!", W / 2, H * 0.42);
+      ctx.fillText("YOU WIN!", W / 2, H * 0.42);
+    }
+    ctx.textAlign = "left";
+    drawTriangleButton(againBtn, youLose ? "#ff8a8a" : "#ffd23f");
   }
 
   function drawParts() {
@@ -909,7 +896,7 @@
 
   function render() {
     drawField();
-    if (state === "win") {
+    if (state === "end") {
       // celebration: everyone jumps and cheers
       const jb = Math.abs(Math.sin(time * 6)) * 22;
       ctx.save();
@@ -931,7 +918,7 @@
     drawParts();
     if (state !== "title") drawSlots();
     if (state === "title") drawTitle();
-    else if (state === "win") drawWin();
+    else if (state === "end") drawEnd();
   }
 
   /* ---------------- layout ---------------- */
@@ -986,7 +973,7 @@
   window.__tagTest = {
     get state() { return state; },
     get cfg() { return CFG; },
-    get starred() { return starredCount(); },
+    get roundT() { return roundT; },
     get it() { return it; }, // "player" or a kid index — who wears the badge
     debug: {
       player: function () { return player; },

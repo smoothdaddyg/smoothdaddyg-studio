@@ -1,9 +1,9 @@
 /* ============================================================
-   SmoothDaddyG — Time Wings (redesign 2026-10-07)
+   SmoothDaddyG — Time Wings (redesign 2026-10-07, stick 2026-10-19)
    A love letter to the original Time Pilot: YOUR plane stays
-   fixed in the middle of the screen. Drag anywhere and the
-   plane rotates to face your finger — the WORLD (clouds,
-   islands, stars) streams past underneath to sell the motion.
+   fixed in the middle of the screen. Steer with the thumb stick
+   at the bottom — your finger stays out of the way and the WORLD
+   (clouds, islands, stars) streams past to sell the motion.
    Big chunky 2x graphics, gentler difficulty. Four eras —
    1910, 1940, 1970, 1983 — each ending in a big boss ship.
    ============================================================ */
@@ -45,7 +45,6 @@
   var invuln = 0, fireCd = 0, spawnT = 1, starT = 5, bossMinionT = 0;
   var downT = 0;             // death pause: >0 means crashed, waiting to respawn
   var shake = 0, clearT = 0, winT = 0, introT = 0, humT = 0;
-  var dragId = null, dragX = 0, dragY = 0;
 
   function era() { return ERAS[level - 1]; }
 
@@ -61,6 +60,7 @@
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    stickHome = { x: W / 2, y: H - 118 };
     seedClouds();
     seedGround();
   }
@@ -104,7 +104,7 @@
     spawnT = 0.8; starT = 4; shake = 0; clearT = 0;
     player.x = 0; player.y = 0; player.hd = -Math.PI / 2;
     camX = 0; camY = 0;
-    dragId = null;
+    stick.id = null;
     introT = 2.0;
     state = "play";
   }
@@ -134,21 +134,43 @@
     return v;
   }
 
-  /* ---------------- input: drag anywhere to rotate ---------------- */
+  /* ---------------- input: thumb stick ---------------- */
+  // A floating-origin virtual joystick. Its home is the bottom of the
+  // screen; press and it anchors where your thumb lands, drag in a
+  // small circle to steer. Your thumb stays low, out of the way of the
+  // action, and the plane (pinned to the middle) turns toward the tilt.
+  var stick = { id: null, ox: 0, oy: 0, kx: 0, ky: 0 };
+  var STICK_R = 92, KNOB_R = 38, STICK_DEAD = 15;
+  var stickHome = { x: 0, y: 0 }; // idle base position — set in resize()
+
+  function stickClamp() {
+    var dx = stick.kx - stick.ox, dy = stick.ky - stick.oy;
+    var d = Math.hypot(dx, dy);
+    if (d > STICK_R) {
+      stick.kx = stick.ox + dx / d * STICK_R;
+      stick.ky = stick.oy + dy / d * STICK_R;
+    }
+  }
+
   function onDown(e) {
     if (audio.unlock) audio.unlock();
     if (state === "win") { if (window.SDGplays) SDGplays.played("timewings"); reset(true); e.preventDefault(); return; }
     if (state !== "play") { e.preventDefault(); return; }
-    dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY;
+    stick.id = e.pointerId;
+    stick.ox = e.clientX; stick.oy = e.clientY;
+    stick.kx = e.clientX; stick.ky = e.clientY;
     e.preventDefault();
   }
 
   function onMove(e) {
-    if (e.pointerId === dragId) { dragX = e.clientX; dragY = e.clientY; }
+    if (e.pointerId === stick.id) {
+      stick.kx = e.clientX; stick.ky = e.clientY;
+      stickClamp();
+    }
   }
 
   function onUp(e) {
-    if (e.pointerId === dragId) dragId = null;
+    if (e.pointerId === stick.id) stick.id = null;
   }
 
   canvas.addEventListener("pointerdown", onDown, { passive: false });
@@ -264,10 +286,10 @@
     if (state === "play" && downT <= 0) {
       // steering: the nose swings toward the finger. The plane itself
       // never leaves the middle of the screen — the world moves instead.
-      if (dragId !== null) {
-        var want = Math.atan2(dragY - H / 2, dragX - W / 2);
-        if (Math.hypot(dragX - W / 2, dragY - H / 2) > 24) {
-          player.hd = turnToward(player.hd, want, TURN_RATE * dt);
+      if (stick.id !== null) {
+        var sdx = stick.kx - stick.ox, sdy = stick.ky - stick.oy;
+        if (Math.hypot(sdx, sdy) > STICK_DEAD) {
+          player.hd = turnToward(player.hd, Math.atan2(sdy, sdx), TURN_RATE * dt);
         }
       }
       player.x += Math.cos(player.hd) * PLAYER_SPEED * dt;
@@ -649,14 +671,6 @@
     // THE player — dead center, always (hidden while crashed)
     if (downT <= 0 && !(invuln > 0 && Math.floor(performance.now() / 120) % 2 === 0)) {
       drawPlane(W / 2, H / 2, player.hd, "#d32f2f", "#7f0000", SPR);
-      // little steering ribbon toward the finger
-      if (dragId !== null && state === "play") {
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
-        ctx.lineWidth = 3;
-        ctx.setLineDash([8, 10]);
-        ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.lineTo(dragX, dragY); ctx.stroke();
-        ctx.setLineDash([]);
-      }
     }
 
     // particles
@@ -695,6 +709,8 @@
     }
     drawPixelNumber(ctx, shown, W / 2, 30, 5, "#ffffff", true);
 
+    drawStick();
+
     if (introT > 0 && state === "play") {
       ctx.globalAlpha = Math.min(1, introT);
       drawPixelNumber(ctx, era().year, W / 2, H * 0.38, 8, "#ffd740", true);
@@ -706,7 +722,7 @@
       ctx.fillStyle = "#ffffff";
       ctx.font = Math.round(Math.min(15, W * 0.03)) + 'px "Press Start 2P", monospace';
       ctx.textAlign = "center";
-      ctx.fillText("DRAG TO STEER", W / 2, H * 0.72);
+      ctx.fillText("TILT THE STICK TO STEER", W / 2, H - 245);
       ctx.globalAlpha = 1;
     }
 
@@ -734,6 +750,45 @@
         ctx.globalAlpha = 1;
       }
     }
+  }
+
+  // The thumb stick (screen space): base circle + knob. Idles at the
+  // bottom-center as a hint; jumps to the thumb when grabbed.
+  function drawStick() {
+    if (state !== "play") return;
+    var active = stick.id !== null;
+    var bx = active ? stick.ox : stickHome.x;
+    var by = active ? stick.oy : stickHome.y;
+    var kx = active ? stick.kx : stickHome.x;
+    var ky = active ? stick.ky : stickHome.y;
+    var pulse = active ? 1 : 0.82 + 0.10 * Math.sin(performance.now() / 400);
+    ctx.save();
+    // base ring
+    ctx.globalAlpha = active ? 0.85 : 0.5;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(bx, by, STICK_R * pulse, 0, 6.29); ctx.stroke();
+    ctx.globalAlpha = active ? 0.18 : 0.08;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.arc(bx, by, STICK_R * pulse, 0, 6.29); ctx.fill();
+    ctx.globalAlpha = 1;
+    // direction tick: shows where the tilt is pointing
+    if (active && Math.hypot(kx - bx, ky - by) > STICK_DEAD) {
+      var a = Math.atan2(ky - by, kx - bx);
+      ctx.strokeStyle = "rgba(255,215,64,0.9)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(a) * (STICK_R + 8), by + Math.sin(a) * (STICK_R + 8));
+      ctx.lineTo(bx + Math.cos(a) * (STICK_R + 26), by + Math.sin(a) * (STICK_R + 26));
+      ctx.stroke();
+    }
+    // knob
+    var kg = ctx.createRadialGradient(kx - 10, ky - 12, 6, kx, ky, KNOB_R);
+    kg.addColorStop(0, "#ff8a80"); kg.addColorStop(1, "#c62828");
+    ctx.fillStyle = kg;
+    ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(kx, ky, KNOB_R, 0, 6.29); ctx.fill(); ctx.stroke();
+    ctx.restore();
   }
 
   /* ---------------- main loop ---------------- */
@@ -764,8 +819,10 @@
         if (o.level != null) level = o.level;
       },
       _frame: function (dt) { update(dt); },
-      _drag: function (x, y) { dragId = 1; dragX = x; dragY = y; },
-      _undrag: function () { dragId = null; },
+      _drag: function (x, y) { stick.id = 1; stick.ox = W / 2; stick.oy = H / 2; stick.kx = x; stick.ky = y; stickClamp(); },
+      _stick: function (ox, oy, kx, ky) { stick.id = 1; stick.ox = ox; stick.oy = oy; stick.kx = kx; stick.ky = ky; stickClamp(); },
+      _stickPos: function () { return { ox: stick.ox, oy: stick.oy, kx: stick.kx, ky: stick.ky, active: stick.id !== null, home: { x: stickHome.x, y: stickHome.y } }; },
+      _undrag: function () { stick.id = null; },
       _player: function () { return { x: player.x, y: player.y, hd: player.hd }; },
       _cam: function () { return { x: camX, y: camY }; },
       _screen: function (wx, wy) { return { x: sx(wx), y: sy(wy) }; },

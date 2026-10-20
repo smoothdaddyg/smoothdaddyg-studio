@@ -2,10 +2,13 @@
    SINK THE SHIP! — SmoothDaddyG
    You're a cute chunky submarine. Ships sail past above you —
    your torpedoes auto-fire upward, so all you do is DRAG to steer.
-   Sink the ships, dodge mines / enemy torpedoes / depth charges
-   (hits only STUN you for a second — no game over, ever), and
-   bump the friendly octopus for rapid-fire. 3 levels, then a
-   fireworks finale.
+   Torpedoes destroy EVERYTHING they touch: ships, enemy subs,
+   even planes in the sky. Sunk ships plunge all the way to the
+   ocean floor — and a falling wreck landing on you is fatal.
+   Any hit KILLS you... but you pop back to life after a second,
+   keeping all your progress (no game over, ever). Bump the
+   friendly octopus for rapid-fire. 3 levels, then a fireworks
+   finale.
    ONE interaction: drag anywhere. No reading required.
    ============================================================ */
 
@@ -21,9 +24,8 @@
     RAPID_T: 8,          // octopus rapid-fire lasts 8 seconds
     TORP_SPEED: 560,     // torpedo upward speed px/s
     FUSE_R: 46,          // generous proximity fuse — near-misses still hit
-    SINK_T: 1.2,         // ship sinking animation seconds
-    STUN_T: 1.0,         // enemy hits stun you this long — no penalty
-    GRACE_T: 1.2,        // ...plus this long of no-re-stun grace (forgiving)
+    RESPAWN_T: 1.0,      // a hit KILLS you — then you pop back in 1 second
+    GRACE_T: 0.8,        // ...plus a brief no-re-kill bubble (forgiving)
     GOALS: [5, 6, 7],    // ships to sink per level
     SHIP_SPEED: [        // per level [min, max]
       [60, 105], [95, 145], [115, 175],
@@ -57,7 +59,7 @@
   let sunk = 0;       // ships sunk this level
   let splashT = 0;
 
-  let sub = null;     // {x,y,tx,ty,stunT,rapidT,wob,fireT}
+  let sub = null;     // {x,y,tx,ty,deadT,rapidT,wob,fireT}
   let torps = [];     // {x,y}
   let ships = [];     // {x,y,dir,speed,hue,sinking,sinkT,tilt,smkT}
   let mines = [];     // {x,y,vx,vy,blink}
@@ -120,9 +122,6 @@
     // descending bubble glugs as the ship slides under
     audio.arp([520, 420, 330, 240], 0.11, "sine", 0.10);
   }
-  function sndStun() {
-    audio.tone(300, 0.25, { type: "square", vol: 0.08, slideTo: 140 }); // gentle bonk
-  }
   function sndOcto() {
     audio.arp([523, 659, 784, 1047, 1319], 0.08, "square", 0.11); // happy!
   }
@@ -152,7 +151,7 @@
 
   function resetSub() {
     sub = { x: W / 2, y: H * 0.72, tx: W / 2, ty: H * 0.72,
-            stunT: 0, graceT: 0, rapidT: 0, wob: 0, fireT: 0.4 };
+            deadT: 0, graceT: 0, rapidT: 0, wob: 0, fireT: 0.4 };
   }
 
   function clearEntities() {
@@ -184,7 +183,8 @@
   }
 
   /* ---------------- spawners ---------------- */
-  function spawnShip(x, y, dir, speed) {
+  const SHIP_KINDS = ["cargo", "sail", "destroyer", "liner", "tug"];
+  function spawnShip(x, y, dir, speed, kind) {
     const li = level - 1;
     const d = (dir !== undefined) ? dir : (ships.length % 2 === 0 ? 1 : -1);
     const sp = (speed !== undefined) ? speed
@@ -192,7 +192,8 @@
     const sx = (x !== undefined) ? x : (d > 0 ? -90 : W + 90);
     ships.push({ x: sx, y: (y !== undefined) ? y : WL + 6,
                  dir: d, speed: sp, hue: pick([8, 210, 150, 265, 35]),
-                 sinking: false, sinkT: 0, tilt: 0, smkT: rnd(0, 0.5) });
+                 kind: (kind !== undefined) ? kind : pick(SHIP_KINDS),
+                 sinking: false, sinkT: 0, vy: 0, tilt: 0, smkT: rnd(0, 0.5) });
   }
 
   function spawnMine(x, y) {
@@ -233,25 +234,47 @@
     if (s.sinking) return;
     s.sinking = true;
     s.sinkT = 0;
+    s.vy = 60;
     s.tilt = s.dir * 0.5;
     sunk++;
     boom(s.x, s.y - 10, true);
     sndBoom();
-    sndSink(); // descending glugs as she slides under
+    sndSink(); // descending glugs as she goes down
   }
 
-  function stunSub(x, y) {
-    if (sub.stunT > 0 || sub.graceT > 0) return; // already stunned / in grace
-    sub.stunT = CFG.STUN_T;
-    sub.graceT = CFG.STUN_T + CFG.GRACE_T; // brief no-re-stun bubble — forgiving
-    sub.wob = 0;
-    sndStun();
-    rings.push({ x: x, y: y, r: 12, t: 0, life: 0.5, hue: 200, maxR: 80, lw: 5 });
-    for (let i = 0; i < 10; i++) {
-      addPart({ x: x + rnd(-14, 14), y: y + rnd(-10, 10),
-                vx: rnd(-120, 120), vy: rnd(-120, 40),
-                t: 0, life: rnd(0.3, 0.6), hue: 200, r: rnd(2, 4), grav: 60 });
-    }
+  // torpedoes destroy enemy subs too — big boom, they're gone
+  function sinkESub(e) {
+    const i = esubs.indexOf(e);
+    if (i < 0) return;
+    esubs.splice(i, 1);
+    boom(e.x, e.y, true);
+    sndBoom();
+  }
+
+  // ...and planes! A hit plane blows up in the sky
+  function downPlane(p) {
+    const i = planes.indexOf(p);
+    if (i < 0) return;
+    planes.splice(i, 1);
+    boom(p.x, p.y, true);
+    sndBoom();
+  }
+
+  // ANY hit is fatal — mine, torpedo, depth charge, or a falling wreck.
+  // But you pop back to life after a second, progress fully intact.
+  function killSub(x, y) {
+    if (sub.deadT > 0 || sub.graceT > 0) return; // already dead / in grace
+    sub.deadT = CFG.RESPAWN_T;
+    sub.graceT = CFG.RESPAWN_T + CFG.GRACE_T; // brief no-re-kill bubble
+    boom(x, y, true);
+    sndBoom();
+  }
+
+  function respawnSub() {
+    sub.x = W / 2; sub.y = H * 0.72;
+    sub.tx = sub.x; sub.ty = sub.y;
+    rings.push({ x: sub.x, y: sub.y, r: 14, t: 0, life: 0.5, hue: 190, maxR: 90, lw: 6 });
+    for (let i = 0; i < 8; i++) addBubble(sub.x + rnd(-20, 20), sub.y + rnd(-14, 14));
   }
 
   /* ---------------- input ---------------- */
@@ -317,11 +340,11 @@
     if (state !== "play") return;
 
     /* ----- player sub ----- */
-    if (sub.stunT > 0) {
-      sub.stunT -= dt; sub.wob += dt * 14;
-    }
-    if (sub.graceT > 0) sub.graceT -= dt;
-    if (sub.stunT <= 0) {
+    if (sub.deadT > 0) {
+      // dead: drifting bubbles where you exploded, then pop back to life
+      sub.deadT -= dt;
+      if (sub.deadT <= 0) respawnSub();
+    } else {
       const dx = sub.tx - sub.x, dy = sub.ty - sub.y;
       const d = Math.hypot(dx, dy);
       if (d > 4) {
@@ -329,37 +352,58 @@
         sub.x += dx / d * step; sub.y += dy / d * step;
       }
     }
+    if (sub.graceT > 0) sub.graceT -= dt;
     if (sub.rapidT > 0) sub.rapidT -= dt;
 
-    // auto-fire
-    sub.fireT -= dt;
-    if (sub.fireT <= 0) {
-      fireTorp();
-      sub.fireT = sub.rapidT > 0 ? CFG.RAPID_INTERVAL : CFG.TORP_INTERVAL;
+    // auto-fire (not while dead)
+    if (sub.deadT <= 0) {
+      sub.fireT -= dt;
+      if (sub.fireT <= 0) {
+        fireTorp();
+        sub.fireT = sub.rapidT > 0 ? CFG.RAPID_INTERVAL : CFG.TORP_INTERVAL;
+      }
     }
 
-    // torpedoes fly up; fuse near ships
+    // torpedoes fly up; the fuse kills whatever it touches —
+    // ships at the waterline, enemy subs below, planes in the sky
     for (let i = torps.length - 1; i >= 0; i--) {
       const t = torps[i];
       t.y -= CFG.TORP_SPEED * dt;
-      if (Math.random() < dt * 20) addBubble(t.x + rnd(-4, 4), t.y);
+      if (t.y > WL && Math.random() < dt * 20) addBubble(t.x + rnd(-4, 4), t.y);
       let hit = false;
       for (const s of ships) {
         if (!s.sinking && dist(t.x, t.y, s.x, s.y - 14) < CFG.FUSE_R) {
           sinkShip(s); hit = true; break;
         }
       }
-      if (hit || t.y < WL - 30) torps.splice(i, 1);
+      if (!hit) for (const e of esubs) {
+        if (dist(t.x, t.y, e.x, e.y) < CFG.FUSE_R) {
+          sinkESub(e); hit = true; break;
+        }
+      }
+      if (!hit) for (const p of planes) {
+        if (dist(t.x, t.y, p.x, p.y) < CFG.FUSE_R) {
+          downPlane(p); hit = true; break;
+        }
+      }
+      if (hit || t.y < -40) torps.splice(i, 1);
     }
 
-    // ships sail; sinking ones slide under
+    // ships sail; sunk ones PLUNGE to the ocean floor — and a falling
+    // wreck crushes you if it lands on you
     for (let i = ships.length - 1; i >= 0; i--) {
       const s = ships[i];
       if (s.sinking) {
         s.sinkT += dt;
-        s.y += 55 * dt; s.tilt += s.dir * 0.9 * dt;
+        s.vy = Math.min(s.vy + 420 * dt, 360);
+        s.y += s.vy * dt;
+        s.tilt += s.dir * 0.9 * dt;
+        if (sub.deadT <= 0 && sub.graceT <= 0 &&
+            dist(sub.x, sub.y, s.x, s.y) < 72) {
+          killSub(sub.x, sub.y);
+        }
         if (Math.random() < dt * 14) addBubble(s.x + rnd(-30, 30), s.y - 10);
-        if (s.sinkT >= CFG.SINK_T) ships.splice(i, 1);
+        if (s.y > H + 90) ships.splice(i, 1);
       } else {
         s.x += s.dir * s.speed * dt;
         s.smkT += dt;
@@ -387,8 +431,9 @@
       m.x += m.vx * dt; m.y += m.vy * dt; m.blink += dt * 5;
       if (m.x < 40 || m.x > W - 40) m.vx *= -1;
       if (m.y < H * 0.3 || m.y > H * 0.72) m.vy *= -1;
-      if (sub.graceT <= 0 && dist(sub.x, sub.y, m.x, m.y) < CFG.MINE_R + CFG.SUB_R * 0.7) {
-        stunSub(sub.x, sub.y);
+      if (sub.deadT <= 0 && sub.graceT <= 0 &&
+          dist(sub.x, sub.y, m.x, m.y) < CFG.MINE_R + CFG.SUB_R * 0.7) {
+        killSub(sub.x, sub.y);
         m.vx = (m.x < sub.x ? -1 : 1) * rnd(30, 60); // knock the mine away
         m.vy = (m.y < sub.y ? -1 : 1) * rnd(20, 40);
       }
@@ -411,8 +456,8 @@
       const t = etorps[i];
       t.x += t.dir * CFG.ETORP_SPEED * dt;
       if (Math.random() < dt * 16) addBubble(t.x, t.y - 6);
-      if (sub.graceT <= 0 && dist(sub.x, sub.y, t.x, t.y) < 44) {
-        stunSub(t.x, t.y); etorps.splice(i, 1); continue;
+      if (sub.deadT <= 0 && sub.graceT <= 0 && dist(sub.x, sub.y, t.x, t.y) < 44) {
+        killSub(t.x, t.y); etorps.splice(i, 1); continue;
       }
       if (t.x < -60 || t.x > W + 60) etorps.splice(i, 1);
     }
@@ -442,8 +487,8 @@
         c.y += c.vy * dt;
         if (Math.random() < dt * 10) addBubble(c.x + rnd(-5, 5), c.y - 8);
       }
-      if (sub.graceT <= 0 && dist(sub.x, sub.y, c.x, c.y) < 44) {
-        boom(c.x, c.y, false); stunSub(c.x, c.y); charges.splice(i, 1); continue;
+      if (sub.deadT <= 0 && sub.graceT <= 0 && dist(sub.x, sub.y, c.x, c.y) < 44) {
+        boom(c.x, c.y, false); killSub(c.x, c.y); charges.splice(i, 1); continue;
       }
       if (c.y > H + 30) charges.splice(i, 1);
     }
@@ -516,21 +561,17 @@
 
   function drawSub() {
     const s = sub;
+    if (s.deadT > 0) return; // you're gone — pop back in a second
     ctx.save();
     ctx.translate(s.x, s.y);
-    if (s.stunT > 0) {
-      ctx.translate(Math.sin(s.wob) * 10, Math.cos(s.wob * 0.7) * 6);
-      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(time * 30);
-      ctx.rotate(Math.sin(s.wob * 0.5) * 0.18);
-    }
     // rapid-fire glow
     if (s.rapidT > 0) {
       ctx.strokeStyle = "rgba(255,210,63," + (0.5 + 0.4 * Math.sin(time * 12)).toFixed(2) + ")";
       ctx.lineWidth = 6;
       ctx.beginPath(); ctx.ellipse(0, 0, 62, 34, 0, 0, 6.2832); ctx.stroke();
     }
-    // post-stun grace bubble — gentle "you're safe" shimmer
-    if (s.graceT > 0 && s.stunT <= 0) {
+    // post-respawn grace bubble — gentle "you're safe" shimmer
+    if (s.graceT > 0) {
       ctx.strokeStyle = "rgba(160,220,255," + (0.35 + 0.2 * Math.sin(time * 8)).toFixed(2) + ")";
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.ellipse(0, 0, 68, 38, 0, 0, 6.2832); ctx.stroke();
@@ -571,35 +612,123 @@
     if (Math.random() < 0.06) addBubble(s.x - 40, s.y - 10);
   }
 
+  /* Five ship kinds, each a distinct silhouette so no two look alike:
+     cargo (container stack), sail (tall sails), destroyer (warship),
+     liner (cruise decks), tug (chunky workboat). */
   function drawShip(s) {
     ctx.save();
     ctx.translate(s.x, s.y);
-    if (s.sinking) { ctx.rotate(s.tilt); ctx.globalAlpha = Math.max(0, 1 - s.sinkT / CFG.SINK_T); }
+    if (s.dir < 0) ctx.scale(-1, 1);
+    if (s.sinking) {
+      ctx.rotate(s.tilt);
+      // fades into the deep as she plunges
+      const depthK = Math.min(1, Math.max(0, (s.y - WL) / (H * 0.55)));
+      ctx.globalAlpha = Math.max(0, 1 - depthK * 0.85);
+    }
     const OUT = "#3a2a18";
     ctx.lineWidth = 4; ctx.strokeStyle = OUT;
-    // hull
-    ctx.fillStyle = "hsl(" + s.hue + ",55%,48%)";
-    ctx.beginPath();
-    ctx.moveTo(-64, -18); ctx.lineTo(64, -18); ctx.lineTo(48, 14); ctx.lineTo(-48, 14);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    // waterline stripe
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-60, -20, 120, 7);
-    // cabin
-    ctx.fillStyle = "#f4ead2";
-    ctx.fillRect(-22, -46, 44, 28); ctx.strokeRect(-22, -46, 44, 28);
-    ctx.fillStyle = "#7ec8e8";
-    ctx.fillRect(-16, -40, 32, 12);
-    // smokestack
-    ctx.fillStyle = "#444";
-    ctx.fillRect(26, -52, 16, 34); ctx.strokeRect(26, -52, 16, 34);
-    ctx.fillStyle = "#e23b3b";
-    ctx.fillRect(26, -52, 16, 8);
-    // flag
-    ctx.strokeStyle = OUT; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-34, -46); ctx.lineTo(-34, -66); ctx.stroke();
-    ctx.fillStyle = "#e23b3b";
-    ctx.beginPath(); ctx.moveTo(-34, -66); ctx.lineTo(-14, -60); ctx.lineTo(-34, -54); ctx.closePath(); ctx.fill();
+    const kind = s.kind || "cargo";
+    if (kind === "cargo") {
+      // long hull + stacked shipping containers
+      ctx.fillStyle = "hsl(" + s.hue + ",55%,42%)";
+      ctx.beginPath();
+      ctx.moveTo(-70, -14); ctx.lineTo(70, -14); ctx.lineTo(54, 16); ctx.lineTo(-54, 16);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(-66, -18, 132, 6);
+      const boxHues = [8, 210, 150, 35];
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = "hsl(" + boxHues[(i + s.hue) % 4] + ",60%,50%)";
+        ctx.fillRect(-58 + i * 30, -44, 28, 26);
+        ctx.strokeRect(-58 + i * 30, -44, 28, 26);
+        if (i % 2 === 0) {
+          ctx.fillRect(-58 + i * 30, -68, 28, 22);
+          ctx.strokeRect(-58 + i * 30, -68, 28, 22);
+        }
+      }
+      // wheelhouse aft
+      ctx.fillStyle = "#f4ead2";
+      ctx.fillRect(44, -52, 24, 34); ctx.strokeRect(44, -52, 24, 34);
+      ctx.fillStyle = "#7ec8e8"; ctx.fillRect(48, -46, 16, 10);
+    } else if (kind === "sail") {
+      // sailboat: hull + tall mast + big white sails
+      ctx.fillStyle = "#8a5a33";
+      ctx.beginPath();
+      ctx.moveTo(-52, -10); ctx.lineTo(52, -10); ctx.lineTo(34, 18); ctx.lineTo(-34, 18);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = "#5a3a1e"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, -108); ctx.stroke();
+      ctx.lineWidth = 4; ctx.strokeStyle = OUT;
+      // main sail + jib
+      ctx.fillStyle = "#fdfdf4";
+      ctx.beginPath(); ctx.moveTo(4, -104); ctx.lineTo(4, -14); ctx.lineTo(52, -14);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-4, -96); ctx.lineTo(-4, -14); ctx.lineTo(-44, -14);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // pennant
+      ctx.fillStyle = "#e23b3b";
+      ctx.beginPath(); ctx.moveTo(0, -108); ctx.lineTo(24, -102); ctx.lineTo(0, -96);
+      ctx.closePath(); ctx.fill();
+    } else if (kind === "destroyer") {
+      // gray warship: sleek hull, gun turret, radar mast
+      ctx.fillStyle = "#6b7280";
+      ctx.beginPath();
+      ctx.moveTo(-66, -12); ctx.lineTo(66, -12); ctx.lineTo(70, -2); ctx.lineTo(48, 16); ctx.lineTo(-52, 16);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#4b5563"; ctx.fillRect(-62, -16, 128, 6);
+      // gun turret + barrel
+      ctx.fillStyle = "#565e6b";
+      ctx.beginPath(); ctx.arc(30, -22, 14, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.save(); ctx.translate(30, -26); ctx.rotate(-0.25);
+      ctx.fillRect(0, -4, 44, 8); ctx.strokeRect(0, -4, 44, 8); ctx.restore();
+      // radar mast
+      ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-20, -12); ctx.lineTo(-20, -52); ctx.stroke();
+      ctx.fillStyle = "#9ca3af";
+      ctx.fillRect(-34, -58, 28, 8); ctx.strokeRect(-34, -58, 28, 8);
+      ctx.fillStyle = "#e23b3b";
+      ctx.beginPath(); ctx.arc(-20, -62, 5, 0, 6.2832); ctx.fill();
+    } else if (kind === "liner") {
+      // cruise liner: white, stacked decks, portholes, twin funnels
+      ctx.fillStyle = "#f2f4f6";
+      ctx.beginPath();
+      ctx.moveTo(-64, -16); ctx.lineTo(64, -16); ctx.lineTo(50, 16); ctx.lineTo(-50, 16);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#dfe5ea";
+      ctx.fillRect(-56, -40, 112, 24); ctx.strokeRect(-56, -40, 112, 24);
+      ctx.fillRect(-46, -62, 92, 22); ctx.strokeRect(-46, -62, 92, 22);
+      // portholes
+      ctx.fillStyle = "#2b6cb0";
+      for (let i = 0; i < 6; i++) {
+        ctx.beginPath(); ctx.arc(-45 + i * 18, -28, 5, 0, 6.2832); ctx.fill();
+        if (i < 5) { ctx.beginPath(); ctx.arc(-36 + i * 18, -51, 4, 0, 6.2832); ctx.fill(); }
+      }
+      // twin funnels
+      for (const fx of [-16, 16]) {
+        ctx.fillStyle = "#e23b3b";
+        ctx.fillRect(fx - 8, -92, 16, 32); ctx.strokeRect(fx - 8, -92, 16, 32);
+        ctx.fillStyle = "#333"; ctx.fillRect(fx - 8, -92, 16, 8);
+      }
+    } else { // tug
+      // chunky workboat: tall hull, big wheelhouse, fat stack
+      ctx.fillStyle = "hsl(" + s.hue + ",60%,38%)";
+      ctx.beginPath();
+      ctx.moveTo(-44, -20); ctx.lineTo(44, -20); ctx.lineTo(34, 18); ctx.lineTo(-34, 18);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(-40, -24, 80, 6);
+      // tire fenders
+      ctx.fillStyle = "#222";
+      for (const fx of [-30, 0, 30]) {
+        ctx.beginPath(); ctx.arc(fx, 2, 8, 0, 6.2832); ctx.fill();
+      }
+      // wheelhouse
+      ctx.fillStyle = "#f4ead2";
+      ctx.fillRect(-20, -58, 40, 36); ctx.strokeRect(-20, -58, 40, 36);
+      ctx.fillStyle = "#7ec8e8"; ctx.fillRect(-14, -52, 28, 14); ctx.strokeRect(-14, -52, 28, 14);
+      // fat smokestack
+      ctx.fillStyle = "#444";
+      ctx.fillRect(-34, -84, 18, 30); ctx.strokeRect(-34, -84, 18, 30);
+      ctx.fillStyle = "#e23b3b"; ctx.fillRect(-34, -84, 18, 9);
+    }
     ctx.restore();
   }
 
@@ -822,12 +951,12 @@
     ctx.save();
     ctx.globalAlpha = 0.95;
     const keepSub = sub;
-    sub = { x: W / 2, y: H * 0.62, tx: W / 2, ty: H * 0.62, stunT: 0, graceT: 0, rapidT: 0, wob: 0, fireT: 9 };
+    sub = { x: W / 2, y: H * 0.62, tx: W / 2, ty: H * 0.62, deadT: 0, graceT: 0, rapidT: 0, wob: 0, fireT: 9 };
     drawSub();
     sub = keepSub;
     ctx.restore();
-    drawShip({ x: W * 0.24, y: WL + 6, dir: 1, hue: 8, sinking: false, sinkT: 0, tilt: 0, smkT: 0 });
-    drawShip({ x: W * 0.74, y: WL + 6, dir: -1, hue: 210, sinking: false, sinkT: 0, tilt: 0, smkT: 0 });
+    drawShip({ x: W * 0.24, y: WL + 6, dir: 1, hue: 8, kind: "cargo", sinking: false, sinkT: 0, vy: 0, tilt: 0, smkT: 0 });
+    drawShip({ x: W * 0.74, y: WL + 6, dir: -1, hue: 210, kind: "sail", sinking: false, sinkT: 0, vy: 0, tilt: 0, smkT: 0 });
     // tap hint: pulsing ring
     const pr = 46 + Math.sin(time * 4) * 10;
     ctx.strokeStyle = "rgba(255,255,255,0.85)";
@@ -951,7 +1080,7 @@
         if (state !== "play" && state !== "splash") startGame();
         startLevel(n);
       },
-      spawnShip: function (x, y, dir, speed) { spawnShip(x, y, dir, speed); },
+      spawnShip: function (x, y, dir, speed, kind) { spawnShip(x, y, dir, speed, kind); },
       spawnMine: function (x, y) { spawnMine(x, y); },
       spawnESub: function (x, y, dir) { spawnESub(x, y, dir); },
       spawnPlane: function (x) { spawnPlane(x); },

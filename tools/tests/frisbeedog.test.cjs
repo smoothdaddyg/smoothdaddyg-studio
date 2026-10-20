@@ -97,12 +97,12 @@ function tapIntercept() {
 eq("win at 10 catches", CFG.WIN_CATCHES, 10);
 eq("dog is small (32)", CFG.DOG_R, 32);
 eq("catch radius is generous (68)", CFG.CATCH_R, 68);
-eq("dog is fast now (210)", CFG.DOG_SPEED, 210);
-eq("speed ramp +12 every 2, cap 260",
-  CFG.DOG_SPEED_UP === 12 && CFG.SPEED_EVERY === 2 && CFG.DOG_SPEED_MAX === 260, true);
-eq("disc at Passing Frenzy pass speed (225)", CFG.DISC_SPEED, 225);
+eq("dog is fast now (240)", CFG.DOG_SPEED, 240);
+eq("speed ramp +12 every 2, cap 300",
+  CFG.DOG_SPEED_UP === 12 && CFG.SPEED_EVERY === 2 && CFG.DOG_SPEED_MAX === 300, true);
+eq("disc speed (250)", CFG.DISC_SPEED, 250);
 eq("top UI strip 120px", CFG.STRIP_H, 120);
-eq("turn band 55-70%", CFG.TURN_MIN === 0.55 && CFG.TURN_MAX === 0.70, true);
+eq("turn band 35-70%", CFG.TURN_MIN === 0.35 && CFG.TURN_MAX === 0.70, true);
 
 // ---- title -> play: ready phase ----
 eq("starts on title", F.state, "title");
@@ -118,7 +118,7 @@ eq("ready-beat tap ignored (still ready)", F.debug.frisbee().mode, "ready");
 
 // ---- route shape: out deep, turn, across ----
 F.start();
-F.debug.forceRoute(1, 0.6);
+F.debug.forceRoute(1, 0.6, 0);
 {
   const r = F.debug.route();
   eq("route side", r.side, 1);
@@ -129,13 +129,13 @@ F.debug.forceRoute(1, 0.6);
   const yBot = H - 90, yTop = CFG.STRIP_H + 60;
   const loY = yBot - CFG.TURN_MAX * (yBot - yTop);
   const hiY = yBot - CFG.TURN_MIN * (yBot - yTop);
-  ok("turn depth inside the 55-70% band", r.yTurn >= loY - 1 && r.yTurn <= hiY + 1);
+  ok("turn depth inside the 35-70% band", r.yTurn >= loY - 1 && r.yTurn <= hiY + 1);
   eq("turn point matches yTurn", r.points[1].y, r.yTurn);
   ok("turn is deep but clear of the strip", r.yTurn > CFG.STRIP_H + 40);
   eq("turns across to the right sideline", r.points[2].x, W + 60);
   eq("cross leg stays at turn height", r.points[2].y, r.yTurn);
 }
-F.debug.forceRoute(-1, 0.6);
+F.debug.forceRoute(-1, 0.6, 0);
 {
   const r = F.debug.route();
   eq("route side -1", r.side, -1);
@@ -166,7 +166,7 @@ F.debug.forceRoute(-1, 0.6);
 
 // ---- taps inside the top UI strip don't throw ----
 F.start();
-F.debug.forceRoute(1, 0.6); // straight to running
+F.debug.forceRoute(1, 0.6, 0); // straight to running
 F.tap(200, 60); // y < STRIP_H
 eq("strip tap ignored (frisbee still ready)", F.debug.frisbee().mode, "ready");
 eq("strip tap ignored (not thrown)", F.debug.thrown(), false);
@@ -182,7 +182,7 @@ eq("first throw flies", F.debug.frisbee().mode, "flying");
 
 // ---- disc flies at constant speed ----
 F.start();
-F.debug.forceRoute(1, 0.6);
+F.debug.forceRoute(1, 0.6, 0);
 F.tap(300, 400); // far enough to still be flying after 1s
 {
   const f0 = F.debug.frisbee();
@@ -191,12 +191,12 @@ F.tap(300, 400); // far enough to still be flying after 1s
   const f1 = F.debug.frisbee();
   eq("disc still flying", f1.mode, "flying");
   const covered = Math.hypot(f1.x - sx, f1.y - sy);
-  ok("disc covers ~225px in 1s (constant speed)", Math.abs(covered - 223) < 15);
+  ok("disc covers ~250px in 1s (constant speed)", Math.abs(covered - 248) < 15);
 }
 
 // ---- lead-the-cross interception -> CATCH, disc in his mouth ----
 F.start();
-F.debug.forceRoute(1, 0.6);
+F.debug.forceRoute(1, 0.6, 0);
 tapIntercept(); // solved: disc and dog arrive together on the cross leg
 for (let i = 0; i < 130; i++) F.step(0.016);
 eq("intercepted cross -> CATCH", F.catches, 1);
@@ -207,7 +207,7 @@ eq("frisbee ready for the next round", F.debug.frisbee().mode, "ready");
 
 // ---- throw where he isn't -> MISS, forgiving ----
 F.start();
-F.debug.forceRoute(1, 0.6); // he goes up, then right
+F.debug.forceRoute(1, 0.6, 0); // he goes up, then right
 F.tap(60, 500); // left side: nowhere near his path
 for (let i = 0; i < 90; i++) F.step(0.016);
 eq("throw off his path -> MISS (counter 0)", F.catches, 0);
@@ -218,7 +218,7 @@ eq("still no penalty after the cycle", F.catches, 0);
 
 // ---- no-throw: he runs it all, quiet reset, no penalty ----
 F.start();
-F.debug.forceRoute(1, 0.6);
+F.debug.forceRoute(1, 0.6, 0);
 ok("no-throw run cycles back to ready", stepUntil("ready", 900));
 eq("runoff: counter untouched", F.catches, 0);
 eq("runoff: frisbee ready", F.debug.frisbee().mode, "ready");
@@ -228,7 +228,7 @@ eq("runoff: no miss shake", F.debug.dog().shakeT, 0);
 // ---- interceptions stay catchable as he speeds up (ramp check) ----
 F.start();
 for (let c = 0; c < 4; c++) {
-  F.debug.forceRoute(1, 0.55 + (c % 3) * 0.05);
+  F.debug.forceRoute(1, 0.55 + (c % 3) * 0.05, 0);
   tapIntercept();
   for (let i = 0; i < 130; i++) F.step(0.016);
 }
@@ -237,7 +237,7 @@ eq("4 ramped interceptions -> 4 catches", F.catches, 4);
 // ---- 10 catches -> WIN ----
 F.start();
 for (let c = 0; c < 10; c++) {
-  F.debug.forceRoute(1, 0.55 + (c % 3) * 0.05);
+  F.debug.forceRoute(1, 0.55 + (c % 3) * 0.05, 0);
   tapIntercept();
   for (let i = 0; i < 130; i++) F.step(0.016);
 }
@@ -248,7 +248,113 @@ eq("counter shows 10", F.catches, 10);
 F.tap(W / 2, H * 0.66 + 42); // center of the PLAY AGAIN button
 eq("play again -> back to play", F.state, "play");
 eq("counter reset", F.catches, 0);
+eq("streak reset", F.streak, 0);
 eq("fresh round in ready", F.debug.phase(), "ready");
+
+// ---- route shapes: 1 = diagonal cut (up then out at an angle) ----
+F.start();
+F.debug.forceRoute(1, 0.55, 1);
+const r1 = F.debug.route();
+eq("shape 1 stored", r1.shape, 1);
+{
+  // segment 0 goes UP (mostly vertical), segment 1 goes up-and-OUT
+  // (clearly diagonal: more horizontal than vertical)
+  const p0 = r1.points[0], p1 = r1.points[1], p2 = r1.points[2];
+  const dx0 = Math.abs(p1.x - p0.x), dy0 = Math.abs(p1.y - p0.y);
+  const dx1 = Math.abs(p2.x - p1.x), dy1 = Math.abs(p2.y - p1.y);
+  ok("shape 1 seg0 mostly vertical", dy0 > dx0 * 1.5);
+  ok("shape 1 seg1 diagonal", dx1 > dy1 * 0.5 && dy1 > 0);
+  ok("shape 1 seg1 heads up-and-out", p2.y < p1.y);
+}
+
+// ---- route shapes: 2 = diagonal out (angled start, then across) ----
+F.start();
+F.debug.forceRoute(1, 0.55, 2);
+const r2 = F.debug.route();
+eq("shape 2 stored", r2.shape, 2);
+{
+  const p0 = r2.points[0], p1 = r2.points[1], p2 = r2.points[2];
+  const dx0 = Math.abs(p1.x - p0.x), dy0 = Math.abs(p1.y - p0.y);
+  const dx1 = Math.abs(p2.x - p1.x), dy1 = Math.abs(p2.y - p1.y);
+  ok("shape 2 seg0 diagonal (not straight up)", dx0 > dy0 * 0.3);
+  ok("shape 2 seg1 mostly horizontal", dx1 > dy1 * 2);
+}
+
+// ---- shape 0 = classic (straight up, then 90deg across) ----
+F.start();
+F.debug.forceRoute(1, 0.55, 0);
+const r0 = F.debug.route();
+eq("shape 0 stored", r0.shape, 0);
+{
+  const p0 = r0.points[0], p1 = r0.points[1], p2 = r0.points[2];
+  const dx0 = Math.abs(p1.x - p0.x), dy0 = Math.abs(p1.y - p0.y);
+  const dx1 = Math.abs(p2.x - p1.x), dy1 = Math.abs(p2.y - p1.y);
+  ok("shape 0 seg0 vertical", dx0 < 8 && dy0 > 40);
+  ok("shape 0 seg1 horizontal", dy1 < 8 && dx1 > 40);
+}
+
+// ---- random shapes actually vary ----
+{
+  const seen = {};
+  for (let i = 0; i < 30; i++) {
+    F.start();
+    F.debug.forceRoute(1, 0.5, undefined); // omit shape -> random
+    seen[F.debug.route().shape] = true;
+  }
+  ok("random routes use more than one shape", Object.keys(seen).length >= 2);
+}
+
+// ---- streaks: 3 in a row -> ON FIRE ----
+// shape-agnostic interceptor: scan his whole path, tap the point where
+// disc arrival time best matches his arrival time.
+function tapInterceptAny() {
+  const d = F.debug.dog();
+  const r = F.debug.route();
+  const s = d.speed;
+  const lx = W / 2, ly = H - 24;
+  const pts = [{ x: d.x, y: d.y }];
+  for (let i = r.seg; i < r.points.length; i++) pts.push(r.points[i]);
+  let tDog = 0, px = pts[0].x, py = pts[0].y, best = null, bestErr = 1e9;
+  for (let i = 1; i < pts.length; i++) {
+    const q = pts[i];
+    const segLen = Math.hypot(q.x - px, q.y - py);
+    const steps = Math.max(1, Math.ceil(segLen / 3));
+    for (let j = 1; j <= steps; j++) {
+      const f = j / steps;
+      const x = px + (q.x - px) * f, y = py + (q.y - py) * f;
+      const td = tDog + (segLen * f) / s;
+      const tf = Math.hypot(x - lx, y - ly) / CFG.DISC_SPEED;
+      const err = Math.abs(tf - td);
+      if (err < bestErr) { bestErr = err; best = { x, y }; }
+    }
+    tDog += segLen / s; px = q.x; py = q.y;
+  }
+  F.tap(best.x, best.y);
+}
+F.start();
+for (let c = 0; c < 3; c++) {
+  F.debug.forceRoute(1, 0.55, 0);
+  tapIntercept();
+  for (let i = 0; i < 130; i++) F.step(0.016);
+}
+eq("3 catches -> streak 3", F.streak, 3);
+ok("3 catches -> fire popup lit", F.fireT > 0);
+
+// ---- a miss cools the streak off ----
+F.debug.forceRoute(1, 0.55, 0);
+F.tap(30, 620); // throw nowhere near him
+for (let i = 0; i < 160; i++) F.step(0.016);
+eq("miss -> streak reset", F.streak, 0);
+
+// ---- catches still count during a streak ----
+F.start();
+for (let c = 0; c < 5; c++) {
+  F.debug.forceRoute(1, 0.55, c % 3); // mix shapes
+  tapInterceptAny();
+  for (let i = 0; i < 130; i++) F.step(0.016);
+}
+eq("5 mixed-shape catches -> 5 catches", F.catches, 5);
+eq("5 mixed-shape catches -> streak 5", F.streak, 5);
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
