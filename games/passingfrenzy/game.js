@@ -233,6 +233,10 @@
     if (ball.throwerT < CFG.THROWER_GRACE) return null;
     let best = null, bd = 1e9;
     for (const p of players) {
+      // the thrower can never catch their own pass — they're always right
+      // on the ball just after the grace, which used to "snap" the ball
+      // straight back to their hands (the won't-release bug)
+      if (p === ball.thrower) continue;
       const d = dist(x, y, p.x, p.y);
       if (d < CFG.CATCH_R && d < bd) { bd = d; best = p; }
     }

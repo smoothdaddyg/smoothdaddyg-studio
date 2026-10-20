@@ -258,6 +258,29 @@ ok("teammate caught the pass", caught);
 ok("clock reset on catch", F.debug.ball().possT < 0.3);
 ok("new holder is the mate", F.debug.ball().carrier === mate);
 
+// NO SELF-PASS: a fast carrier throwing in their own running direction
+// must never re-catch the ball — the thrower is always right on it just
+// after the grace, which used to "snap" the ball straight back to their
+// hands (the won't-release bug).
+F.start();
+parkReds();
+freezeAll();
+const runner = F.debug.ball().carrier;
+runner.x = 200; runner.y = 500; runner.vx = 0; runner.vy = -120; // sprinting up
+for (const p of allPlayers()) {
+  if (p === runner) continue;
+  p.x = 360; p.y = 660; // everyone else clear of the throw lane
+}
+F.tap(200, 350); // throw up-court, the way the carrier is running
+eq("ball flying after throw", F.ballMode, "flying");
+let snappedBack = false;
+for (let i = 0; i < 125; i++) { // ~2s of flight
+  F.step(0.016);
+  const b = F.debug.ball();
+  if (b.mode === "carried" && b.carrier === runner) snappedBack = true;
+}
+ok("thrower never re-catches own pass", !snappedBack);
+
 // PASS RELEASE: a red crowding the carrier can't intercept on frame 1 —
 // the ball must leave the passer's hands first (universal throw grace).
 // Regression test: taps used to feel like they "wouldn't release" because
