@@ -54,8 +54,18 @@ function finiteStrand(s) {
 G._layout(1024, 768);
 G._newModel();
 const strands = G.strands();
-ok("has back + front strands", strands.length === 32);
+ok("has back + front strands", strands.length === 42);
 ok("strand point counts sane", strands.every((s) => s.pts.length === s.maxN && (s.front ? s.maxN === 6 : s.maxN === 9)));
+
+// expanded options: more dye, more lips, eyeshadow, more accessories, 9 tools
+{
+  const c = G._counts();
+  ok("12 hair dyes", c.dye === 12);
+  ok("8 lipstick colors", c.lips === 8);
+  ok("6 eyeshadow colors", c.shadows === 6);
+  ok("7 accessories", c.bows === 7);
+  ok("9 tools incl. eyeshadow", c.tools === 9);
+}
 
 // sim stability: 600 steps, nothing explodes or NaNs
 let stable = true, bounded = true;
@@ -108,20 +118,35 @@ ok("brush smooths curls", s1.curl < 0.2);
 // color: dyes strands near pointer
 G._selectTool("color"); // dyeIdx 0
 const s2 = strands[8];
+if (s2.color === G._dye()) G._selectTool("color"); // cycle if it's already this dye
 const before = s2.color;
 G._setPointer(s2.pts[3].x, s2.pts[3].y);
 for (let i = 0; i < 5; i++) { G._applyDragTool(1 / 60); }
 G._clearPointer();
 ok("color tool dyes hair", s2.color !== before);
 
-// cut: tap shortens the nearest strand (total live segments drop by 2)
+// cut: DRAG the scissors through the hair — strands near the drag
+// path get snipped (area effect, not one strand per tap)
 G._selectTool("cut");
-const s3 = strands[10];
 const totalBefore = strands.reduce((a, s) => a + s.n, 0);
-const tp = s3.pts[Math.floor(s3.n / 2)];
-G._applyTapTool(tp.x, tp.y);
+for (let i = 0; i < 30; i++) { // drag horizontally through the mid-hair
+  G._setPointer(300 + i * 15, 380);
+  G.pinRoots(); G._applyDragTool(1 / 60); G.stepStrands(1 / 60);
+}
+G._clearPointer();
 const totalAfter = strands.reduce((a, s) => a + s.n, 0);
-ok("scissors shorten strand", totalAfter === totalBefore - 2);
+ok("scissors snip many strands on a drag", totalAfter < totalBefore - 10);
+
+// eyeshadow: sweeping over the eyes paints the lids
+G._selectTool("shadow");
+const m0 = G._model();
+m0.eyeShadow = 0; m0.eyeShadowColor = null;
+for (let i = 0; i < 60; i++) {
+  G._setPointer(430 + (i % 10) * 16, 259); // sweep across both eyes
+  G._applyDragTool(1 / 60);
+}
+G._clearPointer();
+ok("eyeshadow paints the lids", m0.eyeShadow > 0.5 && !!m0.eyeShadowColor);
 
 // blush: tap cheek raises blush
 G._selectTool("blush");
@@ -131,6 +156,7 @@ G._applyTapTool(512 - 60, 300); // near left cheek for 1024x768 layout
 ok("blush tap applies", m.blush > bBefore);
 
 // style meter climbs with styling
+G._setStyle(0);
 const stBefore = G._style();
 G._selectTool("brush");
 G._setPointer(512, 200);

@@ -26,7 +26,7 @@
 
   /* ---------------- tuning ---------------- */
   var SEG = 9;               // points per strand
-  var BACK_N = 26, FRONT_N = 6;
+  var BACK_N = 34, FRONT_N = 8;
   var HAIR_GRAV = 260;       // gentle — hair floats more than it falls
   var DAMP = 0.985;
   var ITER = 3;              // constraint iterations
@@ -34,9 +34,12 @@
   var SKINS = ["#ffd9b3", "#f1b98a", "#c98d5e", "#8d5a3b"];
   var EYES = ["#5b3a29", "#2f6f4f", "#3a6ea5", "#7b4fa6"];
   var DRESSES = ["#ff6f91", "#40c4ff", "#b388ff", "#69f0ae", "#ffd740"];
-  var DYE = ["#ff5fa2", "#b388ff", "#40c4ff", "#69f0ae", "#ffd740", "#ff8a65"];
-  var LIPS = ["#ff6f9e", "#e0447c", "#ff8a5c", "#b388ff"];
-  var BOWS = ["bow", "headband", "star", "flower"];
+  var DYE = ["#ff5fa2", "#b388ff", "#40c4ff", "#69f0ae", "#ffd740", "#ff8a65",
+             "#ff1744", "#00e5ff", "#76ff03", "#ff6d00", "#212121", "#e8e8f0"];
+  var LIPS = ["#ff6f9e", "#e0447c", "#ff8a5c", "#b388ff",
+              "#d81b60", "#ff3d00", "#8e24aa", "#f48fb1"];
+  var EYESHADOWS = ["#b388ff", "#40c4ff", "#ffd740", "#ff8a65", "#69f0ae", "#f48fb1"];
+  var BOWS = ["bow", "headband", "star", "flower", "tiara", "butterfly", "heart"];
 
   /* ---------------- state ---------------- */
   var cx = 0, cy = 0, R = 100;      // head center + radius
@@ -45,7 +48,7 @@
   var strands = [];                 // hair
   var parts = [];                   // particles (sparkles, hearts, confetti)
   var tool = "brush";               // active tool id
-  var dyeIdx = 0, lipIdx = 0, bowIdx = 0;
+  var dyeIdx = 0, lipIdx = 0, bowIdx = 0, shadowIdx = 0;
   var style = 0;                    // style meter 0..100
   var styleCool = 0;                // per-action points cooldown
   var celebrating = 0;              // celebration timer
@@ -71,6 +74,7 @@
       hairLen: 0.8 + Math.random() * 0.45,
       lipColor: null,
       blush: 0,
+      eyeShadow: 0, eyeShadowColor: null,
       acc: null, accX: 0, accY: 0,   // accessory + placement
       happy: 0.5,
     };
@@ -113,8 +117,8 @@
     }
     // front framing strands — shorter, drawn over the shoulders
     var fsegs = Math.max(5, Math.floor(SEG * 0.7));
-    var arcs = [Math.PI * 1.16, Math.PI * 1.24, Math.PI * 1.32,
-                Math.PI * 1.68, Math.PI * 1.76, Math.PI * 1.84];
+    var arcs = [Math.PI * 1.13, Math.PI * 1.20, Math.PI * 1.27, Math.PI * 1.34,
+                Math.PI * 1.66, Math.PI * 1.73, Math.PI * 1.80, Math.PI * 1.87];
     for (var f = 0; f < FRONT_N; f++) {
       var fa = arcs[f];
       var fx = cx + Math.cos(fa) * R * 0.94;
@@ -186,8 +190,8 @@
       strands[k].rx = cx + Math.cos(a) * R * 0.96;
       strands[k].ry = cy + Math.sin(a) * R * 0.96 - bounce;
     }
-    var arcs = [Math.PI * 1.16, Math.PI * 1.24, Math.PI * 1.32,
-                Math.PI * 1.68, Math.PI * 1.76, Math.PI * 1.84];
+    var arcs = [Math.PI * 1.13, Math.PI * 1.20, Math.PI * 1.27, Math.PI * 1.34,
+                Math.PI * 1.66, Math.PI * 1.73, Math.PI * 1.80, Math.PI * 1.87];
     for (f = 0; f < FRONT_N; f++, k++) {
       var fa = arcs[f];
       strands[k].rx = cx + Math.cos(fa) * R * 0.94;
@@ -203,8 +207,9 @@
     { id: "curl", icon: "curl" },
     { id: "dry", icon: "dry" },
     { id: "color", icon: "color", variant: true },
-    { id: "cut", icon: "cut", tap: true },
+    { id: "cut", icon: "cut" },
     { id: "lips", icon: "lips", variant: true },
+    { id: "shadow", icon: "shadow", variant: true },
     { id: "blush", icon: "blush", tap: true },
     { id: "bow", icon: "bow", variant: true, tap: true },
   ];
@@ -218,6 +223,7 @@
       // tap the active tool again -> cycle its variant
       if (id === "color") { dyeIdx = (dyeIdx + 1) % DYE.length; tone(700 + dyeIdx * 90, 0.08, { type: "triangle", vol: 0.12 }); }
       if (id === "lips") { lipIdx = (lipIdx + 1) % LIPS.length; tone(600 + lipIdx * 110, 0.08, { type: "triangle", vol: 0.12 }); }
+      if (id === "shadow") { shadowIdx = (shadowIdx + 1) % EYESHADOWS.length; tone(800 + shadowIdx * 100, 0.08, { type: "sine", vol: 0.12 }); }
       if (id === "bow") { bowIdx = (bowIdx + 1) % BOWS.length; tone(900 + bowIdx * 120, 0.1, { type: "sine", vol: 0.14 }); }
       return;
     }
@@ -328,6 +334,32 @@
         arp([880, 1174, 1568], 0.07, "sine", 0.1);
         addStyle(4);
       }
+    } else if (tool === "cut") {
+      // SCISSORS: drag through the hair and everything near the blades
+      // gets snipped AT the pointer — short, satisfying chops, locks fall
+      var cutAny = false;
+      for (var c = 0; c < strands.length; c++) {
+        var s3 = strands[c];
+        var bestJ = -1, bestD2 = 60 * 60;
+        for (var q = 3; q < s3.n; q++) {
+          var pp = s3.pts[q];
+          var pdx = pp.x - x, pdy = pp.y - y;
+          var pd2 = pdx * pdx + pdy * pdy;
+          if (pd2 < bestD2) { bestD2 = pd2; bestJ = q; }
+        }
+        if (bestJ > 0 && s3.n > 4 && (!s3.lastCut || time - s3.lastCut > 0.3)) {
+          var cutP = s3.pts[bestJ];
+          s3.n = Math.max(3, bestJ + 1);
+          s3.grow = 0; s3.lastCut = time;
+          noise(0.05, { filter: "highpass", freq: 3200, vol: 0.22 });
+          sparkle(cutP.x, cutP.y, "#ffffff", 4);
+          // the snipped lock flutters down
+          parts.push({ x: cutP.x, y: cutP.y, vx: (Math.random() - 0.5) * 90, vy: 60,
+                       life: 1.3, t: 0, c: s3.color, r: 3, lock: true });
+          cutAny = true;
+        }
+      }
+      if (cutAny) { addStyle(6); if (Math.random() < 0.25) giggle(); }
     } else if (tool === "lips") {
       // only the mouth takes lipstick
       var mx = cx, my = cy + R * 0.52;
@@ -341,32 +373,31 @@
           addStyle(6);
         }
       }
+    } else if (tool === "shadow") {
+      // eyeshadow: sweep over the eyes to paint the lids
+      var eyeY = cy - R * 0.10, eyeX = R * 0.36, applied = false;
+      for (var es = -1; es <= 1; es += 2) {
+        var eex = cx + es * eyeX;
+        var dex = (x - eex) / (R * 0.30), dey = (y - (eyeY - R * 0.10)) / (R * 0.22);
+        if (dex * dex + dey * dey < 1.3) {
+          if (model.eyeShadowColor !== EYESHADOWS[shadowIdx] || model.eyeShadow < 1) {
+            model.eyeShadowColor = EYESHADOWS[shadowIdx];
+            model.eyeShadow = Math.min(1, model.eyeShadow + dt * 3);
+            applied = true;
+          }
+        }
+      }
+      if (applied) {
+        sparkle(x, y, EYESHADOWS[shadowIdx], 2);
+        addStyle(dt * 10);
+        if (model.eyeShadow >= 1 && Math.random() < dt * 2) giggle();
+      }
     }
   }
 
   // called once on tap for tap-tools
   function applyTapTool(x, y) {
-    if (tool === "cut") {
-      var best = null, bestD = 75 * 75, bs = null;
-      for (var i = 0; i < strands.length; i++) {
-        var s = strands[i];
-        for (var j = 2; j < s.n; j++) {
-          var p = s.pts[j];
-          var dx = p.x - x, dy = p.y - y, d2 = dx * dx + dy * dy;
-          if (d2 < bestD) { bestD = d2; best = p; bs = s; }
-        }
-      }
-      if (bs && bs.n > 3) {
-        bs.n = Math.max(3, bs.n - 2); bs.grow = 0;
-        noise(0.05, { filter: "highpass", freq: 3200, vol: 0.22 });
-        setTimeout(function () { noise(0.05, { filter: "highpass", freq: 3800, vol: 0.2 }); }, 70);
-        sparkle(best.x, best.y, "#e8e8e8", 5);
-        // the snipped lock flutters away
-        parts.push({ x: best.x, y: best.y, vx: (Math.random() - 0.5) * 60, vy: 40, life: 1.4, t: 0, c: bs.color, r: 3, lock: true });
-        giggle();
-        addStyle(5);
-      }
-    } else if (tool === "blush") {
+    if (tool === "blush") {
       var chx = R * 0.52, chy = cy + R * 0.30, chr = R * 0.30;
       var dl = Math.hypot(x - (cx - chx), y - chy), dr = Math.hypot(x - (cx + chx), y - chy);
       if ((dl < chr * 1.8 || dr < chr * 1.8) && model.blush < 1) {
@@ -396,6 +427,8 @@
       noise(0.15, { filter: "highpass", freq: 5200, vol: 0.045 });
     if (tool === "dry" && Math.random() < dt * 8)
       noise(0.2, { filter: "lowpass", freq: 750, vol: 0.08 });
+    if (tool === "cut" && Math.random() < dt * 3)
+      noise(0.04, { filter: "highpass", freq: 3400, vol: 0.06 }); // snip-snip
   }
 
   /* ---------------- celebration: the style is DONE ---------------- */
@@ -531,7 +564,7 @@
         var q = s.pts[Math.max(0, j - 1)];
         var dx = p.x - q.x, dy = p.y - q.y;
         var d = Math.sqrt(dx * dx + dy * dy) || 1;
-        var w = Math.sin(j * 1.35 + s.phase) * 11 * s.curl;
+        var w = Math.sin(j * 1.35 + s.phase) * 8 * s.curl;
         ox = (-dy / d) * w; oy = (dx / d) * w;
       }
       var X = p.x + ox, Y = p.y + oy;
@@ -588,6 +621,18 @@
     ctx.fillStyle = model.skin; ctx.fill();
 
     var happy = model.happy;
+    // eyeshadow — a wash of color over the lids, painted with the shadow tool
+    if (model.eyeShadow > 0.01 && model.eyeShadowColor) {
+      var shEx = R * 0.36, shEy = cy - R * 0.10 - by;
+      ctx.fillStyle = model.eyeShadowColor;
+      ctx.globalAlpha = 0.5 * model.eyeShadow;
+      for (var ss2 = -1; ss2 <= 1; ss2 += 2) {
+        ctx.beginPath();
+        ctx.ellipse(cx + ss2 * shEx, shEy - R * 0.07, R * 0.155, R * 0.11, 0, 0, 6.29);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
     // eyes
     var ex = R * 0.36, ey = cy - R * 0.10 - by, er = R * 0.20;
     for (var s = -1; s <= 1; s += 2) {
@@ -665,6 +710,45 @@
       }
       ctx.fillStyle = "#ffd740";
       ctx.beginPath(); ctx.arc(0, 0, 9, 0, 6.29); ctx.fill();
+    } else if (kind === "tiara") {
+      // golden crown
+      ctx.fillStyle = "#ffd740";
+      ctx.shadowColor = "#ffd740"; ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(-24, 8); ctx.lineTo(-24, -8);
+      ctx.lineTo(-16, 2); ctx.lineTo(-8, -14); ctx.lineTo(0, 2);
+      ctx.lineTo(8, -14); ctx.lineTo(16, 2); ctx.lineTo(24, -8);
+      ctx.lineTo(24, 8); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ff5f9e";
+      ctx.beginPath(); ctx.arc(-8, -5, 3.5, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(8, -5, 3.5, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#40c4ff";
+      ctx.beginPath(); ctx.arc(0, 0, 4, 0, 6.29); ctx.fill();
+    } else if (kind === "butterfly") {
+      // butterfly hair clip
+      for (var w = -1; w <= 1; w += 2) {
+        ctx.save(); ctx.scale(w, 1);
+        ctx.fillStyle = "#b388ff";
+        ctx.beginPath(); ctx.ellipse(13, -8, 12, 16, 0.5, 0, 6.29); ctx.fill();
+        ctx.fillStyle = "#ffd740";
+        ctx.beginPath(); ctx.arc(15, -12, 4.5, 0, 6.29); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = "#3e2723";
+      ctx.beginPath(); ctx.ellipse(0, 0, 4, 11, 0, 0, 6.29); ctx.fill();
+    } else if (kind === "heart") {
+      // big sparkly heart clip
+      ctx.fillStyle = "#ff5f8a";
+      ctx.shadowColor = "#ff5f8a"; ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(0, 16);
+      ctx.bezierCurveTo(-26, -2, -16, -22, 0, -8);
+      ctx.bezierCurveTo(16, -22, 26, -2, 0, 16);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.beginPath(); ctx.arc(-7, -8, 4, 0, 6.29); ctx.fill();
     }
     ctx.restore();
   }
@@ -740,6 +824,19 @@
       ctx.moveTo(-9, -s * 0.05); ctx.lineTo(9, -s * 0.05);
       ctx.lineTo(9, -s * 0.28); ctx.lineTo(-9, -s * 0.14);
       ctx.closePath(); ctx.fill();                        // slanted bullet
+    } else if (id === "shadow") {
+      // an eye wearing the current shadow color
+      ctx.fillStyle = variantColor;
+      ctx.beginPath(); ctx.ellipse(0, -s * 0.10, s * 0.30, s * 0.12, 0, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.ellipse(0, s * 0.04, s * 0.28, s * 0.16, 0, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#3a3a4a";
+      ctx.beginPath(); ctx.arc(0, s * 0.04, s * 0.11, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(-s * 0.04, 0, s * 0.04, 0, 6.29); ctx.fill();
+      ctx.strokeStyle = "#3a3a4a"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-s * 0.05, -s * 0.22); ctx.lineTo(-s * 0.11, -s * 0.32); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s * 0.05, -s * 0.22); ctx.lineTo(s * 0.11, -s * 0.32); ctx.stroke();
     } else if (id === "blush") {
       ctx.fillStyle = "#ff9ec6";
       ctx.beginPath(); ctx.arc(0, 0, s * 0.30, 0, 6.29); ctx.fill();
@@ -761,7 +858,9 @@
   function variantColorFor(id) {
     if (id === "color") return DYE[dyeIdx];
     if (id === "lips") return LIPS[lipIdx];
-    if (id === "bow") return ["#ff5f9e", "#ffd740", "#ffd740", "#ff9ec6"][bowIdx];
+    if (id === "shadow") return EYESHADOWS[shadowIdx];
+    if (id === "bow") return ["#ff5f9e", "#ffd740", "#ffd740", "#ff9ec6",
+                              "#ffd740", "#b388ff", "#ff5f8a"][bowIdx];
     return "#eaf6ff";
   }
 
@@ -940,6 +1039,14 @@
       _setPointer: function (x, y) { pointer.down = true; pointer.x = pointer.px = x; pointer.y = pointer.py = y; },
       _clearPointer: function () { pointer.down = false; },
       _style: function () { return style; },
+      _setStyle: function (v) { style = v; celebrating = 0; },
+      _counts: function () {
+        return {
+          tools: TOOLS.length, dye: DYE.length, lips: LIPS.length,
+          shadows: EYESHADOWS.length, bows: BOWS.length, strands: strands.length,
+        };
+      },
+      _dye: function () { return DYE[dyeIdx]; },
       _layout: function (w, h) { W = w; H = h; barH = 116; R = Math.min(W, H - barH) * 0.215; cx = W / 2; cy = (H - barH) * 0.44; if (model) buildHair(); },
     };
   }
