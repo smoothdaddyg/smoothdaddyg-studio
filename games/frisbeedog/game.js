@@ -23,7 +23,7 @@
     DOG_SPEED_UP: 12,   // +px/s every SPEED_EVERY catches (gentle ramp)
     SPEED_EVERY: 2,
     DOG_SPEED_MAX: 300, // cap
-    DISC_SPEED: 250,    // frisbee speed px/s — constant, Passing Frenzy pass feel
+    DISC_SPEED: 360,    // frisbee speed px/s — well past the dog (240-300), snappy lead-pass feel
     STRIP_H: 120,       // top UI strip: taps, targets and the dog stay below it
     RESOLVE_T: 1.0,     // celebration beat after catch / miss (snappy)
     READY_T: 0.6,       // "ready" beat: paw-print telegraph, then the whistle

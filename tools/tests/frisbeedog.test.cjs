@@ -100,7 +100,7 @@ eq("catch radius is generous (68)", CFG.CATCH_R, 68);
 eq("dog is fast now (240)", CFG.DOG_SPEED, 240);
 eq("speed ramp +12 every 2, cap 300",
   CFG.DOG_SPEED_UP === 12 && CFG.SPEED_EVERY === 2 && CFG.DOG_SPEED_MAX === 300, true);
-eq("disc speed (250)", CFG.DISC_SPEED, 250);
+eq("disc speed (360)", CFG.DISC_SPEED, 360);
 eq("top UI strip 120px", CFG.STRIP_H, 120);
 eq("turn band 35-70%", CFG.TURN_MIN === 0.35 && CFG.TURN_MAX === 0.70, true);
 
@@ -183,7 +183,7 @@ eq("first throw flies", F.debug.frisbee().mode, "flying");
 // ---- disc flies at constant speed ----
 F.start();
 F.debug.forceRoute(1, 0.6, 0);
-F.tap(300, 400); // far enough to still be flying after 1s
+F.tap(40, 140); // far corner just below the UI strip — still flying after 1s at the faster disc speed
 {
   const f0 = F.debug.frisbee();
   const sx = f0.x, sy = f0.y;
@@ -191,14 +191,18 @@ F.tap(300, 400); // far enough to still be flying after 1s
   const f1 = F.debug.frisbee();
   eq("disc still flying", f1.mode, "flying");
   const covered = Math.hypot(f1.x - sx, f1.y - sy);
-  ok("disc covers ~250px in 1s (constant speed)", Math.abs(covered - 248) < 15);
+  ok("disc covers ~360px in 1s (constant speed)", Math.abs(covered - 357) < 16);
 }
 
 // ---- lead-the-cross interception -> CATCH, disc in his mouth ----
 F.start();
 F.debug.forceRoute(1, 0.6, 0);
 tapIntercept(); // solved: disc and dog arrive together on the cross leg
-for (let i = 0; i < 130; i++) F.step(0.016);
+{
+  // step until the catch lands (flight time varies with disc speed)
+  let n = 0;
+  while (F.catches < 1 && n++ < 400) F.step(0.016);
+}
 eq("intercepted cross -> CATCH", F.catches, 1);
 eq("catch -> disc visibly in his mouth", F.debug.frisbee().mode, "caught");
 eq("catch -> resolve beat", F.debug.phase(), "resolve");
@@ -335,7 +339,9 @@ F.start();
 for (let c = 0; c < 3; c++) {
   F.debug.forceRoute(1, 0.55, 0);
   tapIntercept();
-  for (let i = 0; i < 130; i++) F.step(0.016);
+  const before = F.catches;
+  let n = 0;
+  while (F.catches === before && n++ < 400) F.step(0.016);
 }
 eq("3 catches -> streak 3", F.streak, 3);
 ok("3 catches -> fire popup lit", F.fireT > 0);
