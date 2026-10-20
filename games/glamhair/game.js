@@ -1,11 +1,14 @@
 /* ============================================================
    Glam Hair — SmoothDaddyG
    ------------------------------------------------------------
-   A no-reading hair salon: one cute girl, eight big tools.
+   A no-reading hair salon: one cute girl, eleven big tools.
    Tap a tool, then drag it through her hair (or tap her face
-   for makeup). Brush, curl, blow-dry, dye, snip, lipstick,
-   blush, bows. She giggles, sparkles fly, and a full style
-   meter earns a celebration and a brand-new model.
+   for makeup). Brush, curl, blow-dry, change the LENGTH, dye
+   (16 colors), snip with real drag scissors, lipstick (12),
+   eyeshadow (10), blush (4 colors), freckles, and 14 hair
+   accessories that STACK — wear them all at once. She
+   giggles, sparkles fly, and a full style meter earns a
+   celebration and a brand-new model.
 
    Hair is a verlet-rope simulation: every strand is a chain
    of points with gravity, damping and length constraints, so
@@ -26,7 +29,7 @@
 
   /* ---------------- tuning ---------------- */
   var SEG = 9;               // points per strand
-  var BACK_N = 34, FRONT_N = 8;
+  var BACK_N = 44, FRONT_N = 10;
   var HAIR_GRAV = 260;       // gentle — hair floats more than it falls
   var DAMP = 0.985;
   var ITER = 3;              // constraint iterations
@@ -35,11 +38,17 @@
   var EYES = ["#5b3a29", "#2f6f4f", "#3a6ea5", "#7b4fa6"];
   var DRESSES = ["#ff6f91", "#40c4ff", "#b388ff", "#69f0ae", "#ffd740"];
   var DYE = ["#ff5fa2", "#b388ff", "#40c4ff", "#69f0ae", "#ffd740", "#ff8a65",
-             "#ff1744", "#00e5ff", "#76ff03", "#ff6d00", "#212121", "#e8e8f0"];
+             "#ff1744", "#00e5ff", "#76ff03", "#ff6d00", "#212121", "#e8e8f0",
+             "#ffdab9", "#e75480", "#20b2aa", "#b0e0e6"];
   var LIPS = ["#ff6f9e", "#e0447c", "#ff8a5c", "#b388ff",
-              "#d81b60", "#ff3d00", "#8e24aa", "#f48fb1"];
-  var EYESHADOWS = ["#b388ff", "#40c4ff", "#ffd740", "#ff8a65", "#69f0ae", "#f48fb1"];
-  var BOWS = ["bow", "headband", "star", "flower", "tiara", "butterfly", "heart"];
+              "#d81b60", "#ff3d00", "#8e24aa", "#f48fb1",
+              "#ff9e80", "#c2185b", "#7b1fa2", "#ffccbc"];
+  var EYESHADOWS = ["#b388ff", "#40c4ff", "#ffd740", "#ff8a65", "#69f0ae", "#f48fb1",
+                    "#9d4edd", "#f72585", "#4cc9f0", "#90be6d"];
+  var BLUSHES = ["#ff8fab", "#ffab91", "#ff6f91", "#c94f7c"];
+  var BOWS = ["bow", "headband", "star", "flower", "tiara", "butterfly", "heart",
+              "catears", "horn", "gem", "ribbon", "halo", "moon", "rainbow"];
+  var LENGTHS = [0.55, 0.85, 1.15, 1.5];  // bob, short, long, SUPER long
 
   /* ---------------- state ---------------- */
   var cx = 0, cy = 0, R = 100;      // head center + radius
@@ -48,7 +57,7 @@
   var strands = [];                 // hair
   var parts = [];                   // particles (sparkles, hearts, confetti)
   var tool = "brush";               // active tool id
-  var dyeIdx = 0, lipIdx = 0, bowIdx = 0, shadowIdx = 0;
+  var dyeIdx = 0, lipIdx = 0, bowIdx = 0, shadowIdx = 0, blushIdx = 0, lengthIdx = 2;
   var style = 0;                    // style meter 0..100
   var styleCool = 0;                // per-action points cooldown
   var celebrating = 0;              // celebration timer
@@ -66,6 +75,16 @@
      THE MODEL
      ============================================================ */
   function newModel() {
+    // freckle spots: a natural scatter across the nose and cheeks
+    var spots = [];
+    for (var fi = 0; fi < 16; fi++) {
+      var side = fi % 2 === 0 ? -1 : 1;
+      spots.push({
+        dx: side * (0.06 + Math.random() * 0.42),
+        dy: 0.30 + Math.random() * 0.16 - Math.abs(side) * 0.02,
+        r: 1.6 + Math.random() * 1.6,
+      });
+    }
     model = {
       skin: SKINS[Math.floor(Math.random() * SKINS.length)],
       eye: EYES[Math.floor(Math.random() * EYES.length)],
@@ -73,9 +92,10 @@
       hairBase: DYE[Math.floor(Math.random() * DYE.length)],
       hairLen: 0.8 + Math.random() * 0.45,
       lipColor: null,
-      blush: 0,
+      blush: 0, blushColor: BLUSHES[0],
       eyeShadow: 0, eyeShadowColor: null,
-      acc: null, accX: 0, accY: 0,   // accessory + placement
+      freckles: 0, freckSpots: spots,
+      accs: [],   // STACKED accessories [{kind, x, y}] — wear them all!
       happy: 0.5,
     };
     buildHair();
@@ -117,8 +137,8 @@
     }
     // front framing strands — shorter, drawn over the shoulders
     var fsegs = Math.max(5, Math.floor(SEG * 0.7));
-    var arcs = [Math.PI * 1.13, Math.PI * 1.20, Math.PI * 1.27, Math.PI * 1.34,
-                Math.PI * 1.66, Math.PI * 1.73, Math.PI * 1.80, Math.PI * 1.87];
+    var arcs = [Math.PI * 1.11, Math.PI * 1.17, Math.PI * 1.23, Math.PI * 1.29, Math.PI * 1.35,
+                Math.PI * 1.65, Math.PI * 1.71, Math.PI * 1.77, Math.PI * 1.83, Math.PI * 1.89];
     for (var f = 0; f < FRONT_N; f++) {
       var fa = arcs[f];
       var fx = cx + Math.cos(fa) * R * 0.94;
@@ -126,6 +146,20 @@
       strands.push(createStrand(fx, fy, Math.cos(fa) * 0.7, 1, fsegs, segLen * 0.9, model.hairBase));
       strands[strands.length - 1].front = true;
     }
+  }
+
+  // Change the hair LENGTH, keeping every strand's color and curl —
+  // a new hairdo, not a new head of hair.
+  function restyleLength() {
+    if (!model) return;
+    var keep = strands.map(function (s) { return { color: s.color, curl: s.curl, front: !!s.front }; });
+    model.hairLen = LENGTHS[lengthIdx];
+    buildHair();
+    for (var i = 0; i < strands.length && i < keep.length; i++) {
+      strands[i].color = keep[i].color;
+      strands[i].curl = keep[i].curl;
+    }
+    sparkle(cx, cy - R * 0.6, "#fff7ae", 10);
   }
 
   function stepStrands(dt) {
@@ -190,8 +224,8 @@
       strands[k].rx = cx + Math.cos(a) * R * 0.96;
       strands[k].ry = cy + Math.sin(a) * R * 0.96 - bounce;
     }
-    var arcs = [Math.PI * 1.13, Math.PI * 1.20, Math.PI * 1.27, Math.PI * 1.34,
-                Math.PI * 1.66, Math.PI * 1.73, Math.PI * 1.80, Math.PI * 1.87];
+    var arcs = [Math.PI * 1.11, Math.PI * 1.17, Math.PI * 1.23, Math.PI * 1.29, Math.PI * 1.35,
+                Math.PI * 1.65, Math.PI * 1.71, Math.PI * 1.77, Math.PI * 1.83, Math.PI * 1.89];
     for (f = 0; f < FRONT_N; f++, k++) {
       var fa = arcs[f];
       strands[k].rx = cx + Math.cos(fa) * R * 0.94;
@@ -206,11 +240,13 @@
     { id: "brush", icon: "brush" },
     { id: "curl", icon: "curl" },
     { id: "dry", icon: "dry" },
+    { id: "grow", icon: "grow", variant: true },
     { id: "color", icon: "color", variant: true },
     { id: "cut", icon: "cut" },
     { id: "lips", icon: "lips", variant: true },
     { id: "shadow", icon: "shadow", variant: true },
-    { id: "blush", icon: "blush", tap: true },
+    { id: "blush", icon: "blush", variant: true, tap: true },
+    { id: "freck", icon: "freck", tap: true },
     { id: "bow", icon: "bow", variant: true, tap: true },
   ];
   var toolRects = [];
@@ -222,8 +258,16 @@
     if (tool === id && t.variant) {
       // tap the active tool again -> cycle its variant
       if (id === "color") { dyeIdx = (dyeIdx + 1) % DYE.length; tone(700 + dyeIdx * 90, 0.08, { type: "triangle", vol: 0.12 }); }
+      if (id === "grow") {
+        // cycle the hair LENGTH: bob -> short -> long -> SUPER long,
+        // keeping every strand's color and curl
+        lengthIdx = (lengthIdx + 1) % LENGTHS.length;
+        restyleLength();
+        tone(500 + lengthIdx * 120, 0.1, { type: "triangle", vol: 0.12 });
+      }
       if (id === "lips") { lipIdx = (lipIdx + 1) % LIPS.length; tone(600 + lipIdx * 110, 0.08, { type: "triangle", vol: 0.12 }); }
       if (id === "shadow") { shadowIdx = (shadowIdx + 1) % EYESHADOWS.length; tone(800 + shadowIdx * 100, 0.08, { type: "sine", vol: 0.12 }); }
+      if (id === "blush") { blushIdx = (blushIdx + 1) % BLUSHES.length; if (model) model.blushColor = BLUSHES[blushIdx]; tone(760 + blushIdx * 100, 0.08, { type: "sine", vol: 0.12 }); }
       if (id === "bow") { bowIdx = (bowIdx + 1) % BOWS.length; tone(900 + bowIdx * 120, 0.1, { type: "sine", vol: 0.14 }); }
       return;
     }
@@ -405,11 +449,22 @@
         giggle();
         addStyle(5);
       }
+    } else if (tool === "freck") {
+      // tap the face: freckles bloom across the nose and cheeks
+      var fdx = x - cx, fdy = y - cy;
+      if (fdx * fdx + fdy * fdy < R * R && model.freckles < 1) {
+        model.freckles = Math.min(1, model.freckles + 0.25);
+        tone(980, 0.08, { type: "sine", vol: 0.1 });
+        sparkle(x, y, "#ffcf9e", 3);
+        giggle();
+        addStyle(4);
+      }
     } else if (tool === "bow") {
       var hx = x - cx, hy = y - (cy - bounce);
       if (hx * hx + hy * hy < (R * 1.25) * (R * 1.25)) {
-        model.acc = BOWS[bowIdx];
-        model.accX = hx; model.accY = hy;
+        // accessories STACK — wear them all at once!
+        model.accs.push({ kind: BOWS[bowIdx], x: hx, y: hy });
+        if (model.accs.length > 8) model.accs.shift();
         tone(1320, 0.16, { type: "triangle", vol: 0.14 });
         sparkle(x, y, "#fff7ae", 8);
         giggle();
@@ -660,11 +715,24 @@
     // nose
     ctx.fillStyle = "rgba(120,70,45,0.5)";
     ctx.beginPath(); ctx.arc(cx, cy + R * 0.22 - by, R * 0.045, 0, 6.29); ctx.fill();
+    // freckles — little sun-kissed dots across the nose and cheeks
+    if (model.freckles > 0) {
+      ctx.fillStyle = "rgba(150,90,50,0.75)";
+      var fn = Math.floor(model.freckles * model.freckSpots.length);
+      for (var fk = 0; fk < fn; fk++) {
+        var sp = model.freckSpots[fk];
+        ctx.beginPath();
+        ctx.arc(cx + sp.dx * R, cy + sp.dy * R - by, sp.r + 0.6, 0, 6.29);
+        ctx.fill();
+      }
+    }
     // blush
     if (model.blush > 0.01) {
-      ctx.fillStyle = "rgba(255,110,150," + (0.55 * model.blush) + ")";
+      ctx.fillStyle = model.blushColor;
+      ctx.globalAlpha = 0.55 * model.blush;
       ctx.beginPath(); ctx.ellipse(cx - R * 0.52, cy + R * 0.30 - by, R * 0.20, R * 0.13, 0, 0, 6.29); ctx.fill();
       ctx.beginPath(); ctx.ellipse(cx + R * 0.52, cy + R * 0.30 - by, R * 0.20, R * 0.13, 0, 0, 6.29); ctx.fill();
+      ctx.globalAlpha = 1;
     }
     // mouth — smile grows with happiness, lipstick paints it
     var mw = R * (0.22 + happy * 0.22), mh = R * (0.05 + happy * 0.13);
@@ -676,7 +744,10 @@
       ctx.beginPath(); ctx.ellipse(cx, myy + mh * 0.35, mw * 0.45, mh * 0.45, 0, 0, 6.29); ctx.fill();
     }
     // accessory
-    if (model.acc) drawAccessory(cx + model.accX, cy - by + model.accY, model.acc);
+    for (var ai = 0; ai < model.accs.length; ai++) {
+      var ac = model.accs[ai];
+      drawAccessory(cx + ac.x, cy - by + ac.y, ac.kind);
+    }
   }
 
   function drawAccessory(x, y, kind) {
@@ -749,6 +820,87 @@
       ctx.shadowBlur = 0;
       ctx.fillStyle = "rgba(255,255,255,0.75)";
       ctx.beginPath(); ctx.arc(-7, -8, 4, 0, 6.29); ctx.fill();
+    } else if (kind === "catears") {
+      // cat ears!
+      ctx.fillStyle = "#2b2b3a";
+      for (var e = -1; e <= 1; e += 2) {
+        ctx.save(); ctx.translate(e * 16, -4); ctx.rotate(e * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(-13, 8); ctx.lineTo(0, -22); ctx.lineTo(13, 8);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#ff8fab";
+        ctx.beginPath();
+        ctx.moveTo(-7, 4); ctx.lineTo(0, -12); ctx.lineTo(7, 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#2b2b3a";
+        ctx.restore();
+      }
+    } else if (kind === "horn") {
+      // unicorn horn — golden spiral
+      ctx.fillStyle = "#ffd740";
+      ctx.shadowColor = "#ffd740"; ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(-9, 6); ctx.quadraticCurveTo(-2, -14, 0, -26);
+      ctx.quadraticCurveTo(2, -14, 9, 6);
+      ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "#ff9ec6"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-6, -2); ctx.quadraticCurveTo(0, 0, 6, -2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-4, -10); ctx.quadraticCurveTo(0, -8, 4, -10); ctx.stroke();
+      ctx.fillStyle = "#ff5f9e";
+      for (var s2 = -1; s2 <= 1; s2 += 2) {
+        ctx.beginPath(); ctx.arc(s2 * 14, 4, 3, 0, 6.29); ctx.fill();
+      }
+    } else if (kind === "gem") {
+      // big diamond clip
+      ctx.fillStyle = "#b3e5fc";
+      ctx.shadowColor = "#b3e5fc"; ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(0, -18); ctx.lineTo(13, -4); ctx.lineTo(0, 14); ctx.lineTo(-13, -4);
+      ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-13, -4); ctx.lineTo(13, -4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(0, 14); ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(-4, -8, 2.5, 0, 6.29); ctx.fill();
+    } else if (kind === "ribbon") {
+      // flowing ribbon bow
+      ctx.fillStyle = "#e040fb";
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-20, -12); ctx.lineTo(-24, 10); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20, -12); ctx.lineTo(24, 10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#ab47bc";
+      ctx.beginPath(); ctx.arc(0, 0, 6, 0, 6.29); ctx.fill();
+      ctx.strokeStyle = "#e040fb"; ctx.lineWidth = 5; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(6, 6); ctx.quadraticCurveTo(14, 22, 6, 30); ctx.stroke();
+    } else if (kind === "halo") {
+      // glowing angel halo
+      ctx.strokeStyle = "#fff176"; ctx.lineWidth = 7; ctx.lineCap = "round";
+      ctx.shadowColor = "#fff176"; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.ellipse(0, -6, 22, 8, 0, 0, 6.29); ctx.stroke();
+      ctx.shadowBlur = 0;
+    } else if (kind === "moon") {
+      // crescent moon clip
+      ctx.fillStyle = "#fff9c4";
+      ctx.shadowColor = "#fff9c4"; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(0, 0, 15, 0.9, 5.4); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffd740";
+      ctx.beginPath(); ctx.arc(6, -12, 2.6, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(-8, 8, 2, 0, 6.29); ctx.fill();
+    } else if (kind === "rainbow") {
+      // mini rainbow clip
+      ctx.lineWidth = 5; ctx.lineCap = "round";
+      var hues = [0, 35, 130, 205, 280];
+      for (var h2 = 0; h2 < hues.length; h2++) {
+        ctx.strokeStyle = "hsl(" + hues[h2] + ", 90%, 62%)";
+        ctx.beginPath();
+        ctx.arc(0, 10, 22 - h2 * 5, Math.PI, 0);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(-20, 10, 6, 0, 6.29); ctx.fill();
+      ctx.beginPath(); ctx.arc(20, 10, 6, 0, 6.29); ctx.fill();
     }
     ctx.restore();
   }
@@ -797,6 +949,23 @@
         ctx.beginPath(); ctx.moveTo(s * 0.18, -s * 0.22 + w * s * 0.22);
         ctx.quadraticCurveTo(s * 0.38, -s * 0.22 + w * s * 0.22 + 6, s * 0.52, -s * 0.22 + w * s * 0.22);
         ctx.stroke();
+      }
+    } else if (id === "grow") {
+      // hair strands of different lengths + an up-down arrow
+      ctx.strokeStyle = "#eaf6ff"; ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-14, -s * 0.3); ctx.lineTo(-14, -s * 0.05); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -s * 0.3); ctx.lineTo(0, s * 0.2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(14, -s * 0.3); ctx.lineTo(14, s * 0.48); ctx.stroke();
+      ctx.fillStyle = "#ffd740";
+      ctx.beginPath(); ctx.moveTo(-8, s * 0.38); ctx.lineTo(8, s * 0.38); ctx.lineTo(0, s * 0.55); ctx.closePath(); ctx.fill();
+    } else if (id === "freck") {
+      // a cheek sprinkled with freckles
+      ctx.fillStyle = "#ffd9b3";
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.34, 0, 6.29); ctx.fill();
+      ctx.fillStyle = "#96643c";
+      var fdots = [[-10, -2], [-3, 3], [4, -3], [10, 2], [0, -8], [7, 7], [-8, 7]];
+      for (var fd = 0; fd < fdots.length; fd++) {
+        ctx.beginPath(); ctx.arc(fdots[fd][0], fdots[fd][1], 2.6, 0, 6.29); ctx.fill();
       }
     } else if (id === "color") {
       ctx.fillStyle = variantColor;
@@ -859,8 +1028,11 @@
     if (id === "color") return DYE[dyeIdx];
     if (id === "lips") return LIPS[lipIdx];
     if (id === "shadow") return EYESHADOWS[shadowIdx];
+    if (id === "blush") return BLUSHES[blushIdx];
     if (id === "bow") return ["#ff5f9e", "#ffd740", "#ffd740", "#ff9ec6",
-                              "#ffd740", "#b388ff", "#ff5f8a"][bowIdx];
+                              "#ffd740", "#b388ff", "#ff5f8a", "#2b2b3a",
+                              "#ffd740", "#b3e5fc", "#e040fb", "#fff176",
+                              "#fff9c4", "#ff8a65"][bowIdx];
     return "#eaf6ff";
   }
 
@@ -1044,6 +1216,7 @@
         return {
           tools: TOOLS.length, dye: DYE.length, lips: LIPS.length,
           shadows: EYESHADOWS.length, bows: BOWS.length, strands: strands.length,
+          blushes: BLUSHES.length, lengths: LENGTHS.length,
         };
       },
       _dye: function () { return DYE[dyeIdx]; },

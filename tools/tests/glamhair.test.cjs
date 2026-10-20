@@ -54,17 +54,19 @@ function finiteStrand(s) {
 G._layout(1024, 768);
 G._newModel();
 const strands = G.strands();
-ok("has back + front strands", strands.length === 42);
+ok("has back + front strands", strands.length === 54);
 ok("strand point counts sane", strands.every((s) => s.pts.length === s.maxN && (s.front ? s.maxN === 6 : s.maxN === 9)));
 
-// expanded options: more dye, more lips, eyeshadow, more accessories, 9 tools
+// expanded options: tons of dye, makeup, accessories, lengths, 11 tools
 {
   const c = G._counts();
-  ok("12 hair dyes", c.dye === 12);
-  ok("8 lipstick colors", c.lips === 8);
-  ok("6 eyeshadow colors", c.shadows === 6);
-  ok("7 accessories", c.bows === 7);
-  ok("9 tools incl. eyeshadow", c.tools === 9);
+  ok("16 hair dyes", c.dye === 16);
+  ok("12 lipstick colors", c.lips === 12);
+  ok("10 eyeshadow colors", c.shadows === 10);
+  ok("4 blush colors", c.blushes === 4);
+  ok("14 accessories", c.bows === 14);
+  ok("4 hair lengths", c.lengths === 4);
+  ok("11 tools", c.tools === 11);
 }
 
 // sim stability: 600 steps, nothing explodes or NaNs
@@ -155,7 +157,35 @@ const bBefore = m.blush;
 G._applyTapTool(512 - 60, 300); // near left cheek for 1024x768 layout
 ok("blush tap applies", m.blush > bBefore);
 
-// style meter climbs with styling
+// accessories STACK: two placements -> two accessories worn at once
+G._selectTool("bow");
+{
+  const m1 = G._model();
+  const n0 = m1.accs.length;
+  G._applyTapTool(512, 200); // top of the head area (1024x768 layout)
+  G._applyTapTool(560, 220);
+  ok("accessories stack", m1.accs.length >= n0 + 2);
+}
+
+// freckles: tapping the face blooms freckles
+G._selectTool("freck");
+{
+  const m2 = G._model();
+  const f0 = m2.freckles;
+  G._applyTapTool(512, 340); // on the face
+  ok("freckle tap adds freckles", m2.freckles > f0);
+}
+
+// length tool: cycling changes the hair length, keeps the dye
+G._selectTool("grow");
+{
+  const m3 = G._model();
+  const len0 = m3.hairLen;
+  const col0 = G.strands()[3].color;
+  G._selectTool("grow"); // tap active tool again -> cycle length
+  ok("length cycles", m3.hairLen !== len0);
+  ok("length keeps strand colors", G.strands()[3].color === col0);
+}
 G._setStyle(0);
 const stBefore = G._style();
 G._selectTool("brush");
