@@ -110,10 +110,31 @@ eq("you tag kid 0", T.it, 0);
 T.debug.placeKid(1, 230, 300); // friend next to the it-kid
 T.debug.placePlayer(60, 120);  // you far away
 for (const j of [2, 3, 4]) T.debug.placeKid(j, 340, 520 + j * 40);
-for (let i = 0; i < 80 && T.it !== 1; i++) T.step(0.016); // cooldown + chase
+for (let i = 0; i < 250 && T.it !== 1; i++) T.step(0.016); // hold + chase
 eq("it-kid tags the friend", T.it, 1);
 
-// ---- it-kid chases the CLOSEST — no favorites ----
+// ---- the HOLD: the new "it" must wait a full second, standing still ----
+T.start();
+T.debug.placeKid(0, 200, 300);
+T.debug.placePlayer(200, 300);
+T.step(0.016); // you tag kid 0 -> it = 0, hold starts
+eq("tag starts the one-second hold", Math.abs(T.itHold - 1.0) < 0.03, true);
+{
+  const k0 = T.debug.kids()[0];
+  const hx = k0.x, hy = k0.y;
+  // hold the friend right next to the it-kid the whole time
+  T.debug.placePlayer(60, 120); // you far away
+  T.debug.placeKid(1, 230, 300); // friend 30px off
+  for (let i = 0; i < 30; i++) T.step(0.016); // 0.48s into the hold
+  eq("it-kid stands still during the hold", T.debug.kids()[0].x === hx && T.debug.kids()[0].y === hy, true);
+  eq("no ping-pong tag during the hold", T.it, 0);
+  // let the hold run out; the it-kid should start chasing again
+  const hx2 = T.debug.kids()[0].x, hy2 = T.debug.kids()[0].y;
+  for (let i = 0; i < 70; i++) T.step(0.016);
+  ok("hold ran down (or a fresh tag restarted it)", T.itHold < 1.0);
+  const moved = Math.hypot(T.debug.kids()[0].x - hx2, T.debug.kids()[0].y - hy2);
+  ok("it-kid resumes the chase after the hold", moved > 20);
+}
 T.start();
 T.debug.placeKid(0, 200, 300);
 T.debug.placePlayer(200, 300);
@@ -121,12 +142,21 @@ T.step(0.016); // you tag kid 0 -> it = 0
 T.debug.placePlayer(350, 620); // you FAR away
 T.debug.placeKid(1, 240, 340); // friend CLOSE to the it-kid
 for (const j of [2, 3, 4]) T.debug.placeKid(j, 340, 120 + j * 40);
-const k0 = T.debug.kids()[0];
-const dBefore = Math.hypot(k0.x - 240, k0.y - 340);
-for (let i = 0; i < 40; i++) T.step(0.016);
-const k0b = T.debug.kids()[0];
-const dAfter = Math.hypot(k0b.x - 240, k0b.y - 340);
-ok("it-kid runs toward the closest (the friend)", dAfter < dBefore - 10);
+for (let i = 0; i < 70; i++) T.step(0.016); // let the hold run out first
+// now put the friend right next to the it-kid and keep everyone else far
+{
+  const itk = T.debug.kids()[0];
+  T.debug.placeKid(1, itk.x + 120, itk.y); // close, but outside tag range
+  for (const j of [2, 3, 4]) T.debug.placeKid(j, 340, 120 + j * 40);
+  T.debug.placePlayer(350, 620);
+  const fr = T.debug.kids()[1];
+  const dBefore = Math.hypot(itk.x - fr.x, itk.y - fr.y);
+  for (let i = 0; i < 40; i++) T.step(0.016);
+  const itk2 = T.debug.kids()[0];
+  const fr2 = T.debug.kids()[1];
+  const dAfter = Math.hypot(itk2.x - fr2.x, itk2.y - fr2.y);
+  ok("it-kid runs toward the closest (the friend)", dAfter < dBefore - 10);
+}
 
 // ---- timer ends the game; loser = who's it ----
 T.start();

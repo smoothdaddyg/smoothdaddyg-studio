@@ -27,7 +27,10 @@
     KID_FLEE_SPEED: 120, // friends run from IT — quick, but you catch them
     FLEE_R: 150,        // friends start running when IT gets this close
     TAG_COOLDOWN: 0.8,  // s after a tag before anyone can be tagged again —
-                        // the "it counts" beat: tagger gets a head start,
+                        // the "it counts" beat; the new IT also STANDS
+                        // STILL for a full second (TAG_HOLD) so the tagger
+                        // gets a real head start — no ping-pong tagging
+    TAG_HOLD: 1.0,      // the new IT must wait this long before chasing
                         // then the new IT can tag anybody
     TAG_R: 70,          // generous tag radius — be kind
     KID_R: 34,          // kid body size (px) — BIG, Fisher-Price chunky
@@ -59,6 +62,8 @@
   // last tag {newIt, t} — the brief "it counts" beat before anyone can
   // be tagged again, so the tagger gets a head start
   let lastTag = null;
+  // how long the NEW "it" must stand still before chasing (the hold)
+  let itHold = 0;
   // the clock: seconds left in the round. At 0, whoever is IT loses.
   let roundT = CFG.ROUND_T;
 
@@ -286,6 +291,7 @@
     resetKids();
     it = "player"; // you start as IT, just like the title says
     lastTag = null;
+    itHold = 0;
     roundT = CFG.ROUND_T;
     state = "play";
     if (window.SDGplays) window.SDGplays.played("tag");
@@ -304,6 +310,9 @@
   function passIt(newIt) {
     lastTag = { newIt: newIt, t: time };
     it = newIt;
+    // the new "it" must wait a full second before chasing — the
+    // tagger gets a head start, no instant ping-pong tagging
+    itHold = CFG.TAG_HOLD;
   }
 
   function tagBurst(x, y) {
@@ -413,7 +422,13 @@
       const k = kids[i];
       k.phase += dt * (3 + k.speed * 0.03);
       if (it === i) {
-        // THIS kid is IT — chase whoever is CLOSEST (you or a friend),
+        // THIS kid is IT — but first, the HOLD: after being tagged the
+        // new "it" must wait a full second standing still, so the
+        // tagger gets a head start and tags can't ping-pong.
+        if (itHold > 0) {
+          continue;
+        }
+        // chase whoever is CLOSEST (you or a friend),
         // no favorites. Tag anybody.
         let tx = player.x, ty = player.y;
         let bd = dist(k.x, k.y, player.x, player.y);
@@ -475,7 +490,9 @@
 
   function tickTags() {
     // the "it counts" beat: after a tag, nobody can be tagged for a
-    // moment — the tagger gets a head start, then IT can tag anybody
+    // moment — the tagger gets a head start, then IT can tag anybody.
+    // And while the new "it" is on their one-second hold, no tags at all.
+    if (itHold > 0) return;
     if (lastTag && (time - lastTag.t) < CFG.TAG_COOLDOWN) return;
     if (it === "player") {
       // you're IT — tag a friend and THEY become it
@@ -511,6 +528,7 @@
     if (state === "play") {
       roundT -= dt;
       if (roundT <= 0) { roundT = 0; endGame(); return; }
+      if (itHold > 0) itHold = Math.max(0, itHold - dt);
       tickPlayer(dt);
       tickKids(dt);
       separateKids();
@@ -744,11 +762,24 @@
     drawKidFace(0, -r * 0.35, r * 0.62, "#f6d3a8");
     // THE star badge: big, bouncing, impossible to miss — but only while YOU are IT
     if (it === "player") {
+      const holding = itHold > 0;
       const starBounce = Math.abs(Math.sin(player.phase * 1.3)) * 7;
       ctx.save();
       ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 22;
-      drawStar(0, -r * 1.55 - starBounce, 26, "#ffe45e", Math.sin(time * 2) * 0.15);
+      drawStar(0, -r * 1.55 - starBounce, 26, "#ffe45e",
+               holding ? time * 9 : Math.sin(time * 2) * 0.15);
       ctx.restore();
+      if (holding) {
+        // the hold: a shrinking ring counts down your wait before you can tag
+        const hk = itHold / CFG.TAG_HOLD;
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,228,94," + (0.35 + hk * 0.5).toFixed(2) + ")";
+        ctx.lineWidth = 5; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 16, -Math.PI / 2, -Math.PI / 2 + hk * Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
     ctx.restore();
   }
@@ -765,12 +796,25 @@
     ctx.restore();
     if (it === idx) {
       // THIS kid is IT — the star badge bounces overhead
+      const holding = itHold > 0;
       const starBounce = Math.abs(Math.sin(k.phase * 1.3)) * 7;
       ctx.save();
       ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 22;
       drawStar(k.x, k.y - CFG.KID_R * 1.55 - starBounce, 26, "#ffe45e",
-               Math.sin(time * 2 + k.phase) * 0.15);
+               holding ? time * 9 : Math.sin(time * 2 + k.phase) * 0.15);
       ctx.restore();
+      if (holding) {
+        // the hold: a shrinking ring counts down the wait
+        const hk = itHold / CFG.TAG_HOLD;
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,228,94," + (0.35 + hk * 0.5).toFixed(2) + ")";
+        ctx.lineWidth = 5; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(k.x, k.y, CFG.KID_R + 14, -Math.PI / 2,
+                -Math.PI / 2 + hk * Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }
 
@@ -975,6 +1019,8 @@
     get cfg() { return CFG; },
     get roundT() { return roundT; },
     get it() { return it; }, // "player" or a kid index — who wears the badge
+    get itHold() { return itHold; },
+    get tagWait() { return CFG.TAG_HOLD; },
     debug: {
       player: function () { return player; },
       kids: function () { return kids; },
