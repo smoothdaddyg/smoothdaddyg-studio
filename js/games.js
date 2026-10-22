@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "crazytraffic", title: "Crazy Traffic", desc: "Weave through traffic! One finger steers and speeds — dodge bouncing cars, unicorns, and even a plane. A new car every level!",
+    hue: 20, sprite: "car", url: "games/crazytraffic/" },
   { id: "sinktheship", title: "Sink the Ship!", desc: "You're the submarine! Drag to steer, torpedoes fire themselves — sink every ship in 3 levels!",
     hue: 160, sprite: "plane", url: "games/sinktheship/" },
   { id: "tag", title: "Tag! You're It", desc: "You're it! Drag to chase five giggling friends around the playground and tag them all!",
