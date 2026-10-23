@@ -121,6 +121,47 @@ function makeAudio() {
     }
   }
 
+  /* Step-sequencer background loop — his rule (2026-10-22): "video
+     games need background music," kept under the sound effects.
+     cfg: bpm (required), steps (default 32), bass[] / lead[] (freq-or-0
+     per step), bassType ("triangle"), leadType ("square"), bassVol,
+     leadVol, kickEvery (steps between kicks, default 8, 0 = none),
+     snareOff (default 4, null = none), hats ("odd"|"all"|"none"),
+     kickVol, snareVol, hatVol. Tones schedule through tone()/noise(),
+     so pre-gesture calls stay silent and the step clock still runs.
+     Returns { tick(dt), start(), stop(), on, step }. */
+  function makeMusic(cfg) {
+    cfg = cfg || {};
+    const steps = cfg.steps || 32;
+    const m = { on: false, step: 0, t: 0, STEP_DUR: 60 / (cfg.bpm || 100) / 2 };
+    function tick(dt) {
+      if (!m.on) return;
+      m.t += dt;
+      while (m.t >= m.STEP_DUR) {
+        m.t -= m.STEP_DUR;
+        const s = m.step % steps;
+        m.step++;
+        const b = cfg.bass && cfg.bass[s];
+        if (b) tone(b, 0.22, { type: cfg.bassType || "triangle", vol: cfg.bassVol != null ? cfg.bassVol : 0.13 });
+        const l = cfg.lead && cfg.lead[s];
+        if (l) tone(l, 0.2, { type: cfg.leadType || "square", vol: cfg.leadVol != null ? cfg.leadVol : 0.03 });
+        const ke = cfg.kickEvery != null ? cfg.kickEvery : 8;
+        if (ke && s % ke === 0) tone(cfg.kickFreq || 130, 0.12, { type: "sine", vol: cfg.kickVol != null ? cfg.kickVol : 0.16, slideTo: 42 });
+        const so = cfg.snareOff !== undefined ? cfg.snareOff : 4;
+        if (ke && so != null && s % ke === so) noise(0.09, { filter: "bandpass", freq: 1800, vol: cfg.snareVol != null ? cfg.snareVol : 0.04 });
+        const hats = cfg.hats || "odd";
+        if ((hats === "odd" && s % 2 === 1) || hats === "all") noise(0.03, { filter: "highpass", freq: 6500, vol: cfg.hatVol != null ? cfg.hatVol : 0.02 });
+      }
+    }
+    return {
+      tick: tick,
+      start: function () { m.on = true; },
+      stop: function () { m.on = false; },
+      get on() { return m.on; },
+      get step() { return m.step; },
+    };
+  }
+
   /* iOS requires the AudioContext to be created inside a user gesture.
      First tap/click unlocks it, plays a 1-sample silent buffer as
      belt-and-suspenders, and removes the listeners. */
@@ -154,6 +195,7 @@ function makeAudio() {
     tone: tone,
     arp: arp,
     noise: noise,
+    makeMusic: makeMusic,
     unlock: unlockNow,
     state: function () { return ctx ? ctx.state : (unlocked ? "none" : "locked"); },
     toggleMute: function () {

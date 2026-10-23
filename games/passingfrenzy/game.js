@@ -10,6 +10,8 @@
    moving. Hold it more than 4 seconds and the shot clock takes it
    (watch the ring shrink, listen for the beeps). No fouls, no
    losing on a mistake — just pure passing fun.
+   Music pass #1 (2026-10-22): a bouncy streetball background loop
+   under the SFX, via the shared audio.makeMusic() sequencer.
    ============================================================ */
 
 (function () {
@@ -43,6 +45,27 @@
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
+
+  /* ---------------- background music ----------------
+     Music pass #1 of his rule (2026-10-22): "video games need
+     background music." A bouncy streetball loop — boom-bap bass,
+     sparse pentatonic stabs, kick/snare/hats — kept quiet under
+     the SFX. Shared sequencer: audio.makeMusic(). */
+  const MUSIC_CFG = {
+    bpm: 100,
+    bassType: "triangle", bassVol: 0.13,
+    leadType: "square", leadVol: 0.03,
+    kickVol: 0.16, snareVol: 0.04, hatVol: 0.02,
+    bass: [110, 0, 0, 110, 0, 0, 130.81, 0,
+           98, 0, 0, 98, 0, 146.83, 0, 0,
+           110, 0, 0, 110, 0, 164.81, 0, 130.81,
+           146.83, 0, 130.81, 0, 98, 0, 98, 0],
+    lead: [0, 0, 440, 0, 0, 0, 523.25, 0,
+           0, 587.33, 0, 0, 659.25, 0, 0, 0,
+           0, 0, 440, 0, 523.25, 0, 0, 0,
+           587.33, 0, 659.25, 0, 523.25, 0, 440, 0],
+  };
+  const music = audio.makeMusic(MUSIC_CFG);
 
   let W = 0, H = 0, DPR = 1, time = 0;
 
@@ -396,6 +419,7 @@
     }
     resetBallToEdge("blue"); // human starts with the ball
     state = "play";
+    music.start();
     if (window.SDGplays) window.SDGplays.played("passingfrenzy");
     audio.arp([392, 523, 659], 0.08, "square", 0.10);
   }
@@ -403,6 +427,7 @@
   /* ---------------- update ---------------- */
   function tick(dt) {
     time += dt;
+    music.tick(dt);
 
     // players always stream, in every state (keeps title/win screens alive)
     for (let i = players.length - 1; i >= 0; i--) {
@@ -764,6 +789,9 @@
     get players() { return players.length; },
     get ballMode() { return ball.mode; },
     get cfg() { return CFG; },
+    get musicOn() { return music.on; },
+    get musicStep() { return music.step; },
+    get musicCfg() { return MUSIC_CFG; },
     debug: {
       players: function () { return players; },
       ball: function () { return ball; },

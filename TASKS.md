@@ -6,7 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
-- (none)
+- Bob — 2026-10-22 — Music pass #1: add shared `makeMusic(cfg)` step-sequencer to `js/chiptune.js` (additive only) and give Passing Frenzy the first background loop (his rule: every game gets music). Ship it, then propose the rollout order.
 
 ## Up next
 - (add tasks here)

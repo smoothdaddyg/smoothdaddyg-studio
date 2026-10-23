@@ -37,12 +37,20 @@ const sandbox = {
   },
   performance: { now: () => 1000 },
   requestAnimationFrame: noop,
-  makeAudio: () => ({ tone: () => { toneCalls++; }, noise: noop, arp: noop, toggleMute: () => false, unlock: noop, state: () => "running" }),
   drawPixelNumber: noop,
   Math, JSON, Object, Array,
 };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
+// real chiptune for the makeMusic sequencer under test (tones stay silent:
+// no AudioContext in node, but the step clock still runs)
+const chiptunePath = path.join(__dirname, "..", "..", "js", "chiptune.js");
+vm.runInContext(fs.readFileSync(chiptunePath, "utf8"), sandbox, { filename: "chiptune.js" });
+const realMakeAudio = sandbox.makeAudio;
+// game audio stub: counting tones for the beep tests, real sequencer for music
+const stubAudio = { tone: () => { toneCalls++; }, noise: noop, arp: noop, toggleMute: () => false, unlock: noop, state: () => "running" };
+stubAudio.makeMusic = (cfg) => realMakeAudio().makeMusic(cfg);
+sandbox.makeAudio = () => stubAudio;
 vm.runInContext(fs.readFileSync(gamePath, "utf8"), sandbox, { filename: "game.js" });
 
 const F = sandbox.window.__frenzyTest;
@@ -366,6 +374,22 @@ ok("fresh blue carrier moves upward (from the bottom)", newCarrier && newCarrier
 // no dead-tap window: a tap right after the runoff throws immediately
 F.tap(200, 100);
 eq("tap right after runoff throws the ball", F.ballMode, "flying");
+
+// BACKGROUND MUSIC (his rule 2026-10-22: every game gets a loop, under the SFX)
+F.start();
+eq("music is on after start", F.musicOn, true);
+const s0 = F.musicStep;
+for (let i = 0; i < 120; i++) F.step(0.016); // ~2s of play
+ok("music step clock advances under play", F.musicStep > s0);
+const s1 = F.musicStep;
+for (let i = 0; i < 600; i++) F.step(0.016); // ~9.6s = one full 32-step loop at 100 BPM
+ok("music keeps looping without stalling", F.musicStep > s1);
+const mc = F.musicCfg;
+eq("bass pattern is 32 steps", mc.bass.length, 32);
+eq("lead pattern is 32 steps", mc.lead.length, 32);
+ok("bass stays under the SFX", mc.bassVol <= 0.15);
+ok("lead stays under the SFX", mc.leadVol <= 0.05);
+ok("kick stays under the SFX", mc.kickVol <= 0.2);
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
