@@ -6,12 +6,12 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
-- Bob — 2026-10-22 — Music pass #1: add shared `makeMusic(cfg)` step-sequencer to `js/chiptune.js` (additive only) and give Passing Frenzy the first background loop (his rule: every game gets music). Committed locally as 71469f9 (82/82 tests, full suite 638 green); `git push origin main` blocked by flaky GitHub transport in the background stage — push from the main session, then curl-verify the live game.js carries the new `?v=` stamp and `MUSIC_CFG`, and move this to Done.
 
 ## Up next
 - (add tasks here)
 
 ## Done
+- 2026-10-23 — Music pass #1: shared `makeMusic(cfg)` step-sequencer in `js/chiptune.js` (additive only); Passing Frenzy gets the first background loop — a 100 BPM boom-bap streetball loop under the SFX (his rule: every game gets music). Pushed via the `push-music-pass-1` retry cron after overnight GitHub-transport failures; verified live by md5 of the deployed chiptune.js. His ears are the QA — the vibe verdict shapes passes #2+.
 - 2026-10-22 — New game: **Crazy Traffic** (#20; Juan's spec, the Race redo done right). You're at the bottom, traffic falls toward you; ~38% of cars ricochet off the road edges. One-finger floating stick (floats to the finger — either hand): drag sideways to steer, up = faster, down = slower, release settles to cruise. Funny obstacles: oil slick + banana (spin-outs), unicorn + chicken crossings (they leap away), beach ball (boings off), a PLANE that drives down the road (L3+), star blaster pickup (L2+, auto-zaps the car ahead). Traffic cars carry pizza stacks, surfboards, trees, gifts, balloons, ice cream. 5 levels, a NEW CAR each level (convertible → pickup → taxi → hot rod → rainbow rocket), distance bar to the checkered flag. Crashes knock the other car off the road and spin you out ~1s — miles never lost. 51/51 tests. 20 games live, 30 to go toward 50.
 - 2026-10-05 — New game: Miss Munch (his pick: a Ms. Pac-Man-like with an original name). Swipe anywhere to steer — one interaction, either hand. 5 hand-designed mazes (flood-fill validated: every dot reachable), 4 monsters per level with new palettes and faster speeds each level, power pellets, fruit, 3 shields, score count-up. Beat all 5 for the big-surprise finale: fireworks, a two-octave fanfare, spinning star monsters, rainbow wash. 79/79 node logic + render tests pass. 13 games live, 37 to go toward 50.
 - 2026-10-05 — Catalog now sorted newest → oldest (his call): GAMES array reversed (home-page featured 3 are the newest), games.html JSON-LD positions renumbered to match. Repo AGENTS.md: new games go at the FRONT of GAMES.
