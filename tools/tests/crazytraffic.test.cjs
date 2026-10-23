@@ -75,7 +75,9 @@ eq("dist 0", T.dist, 0);
 {
   const p = T.debug.player(), r = T.debug.road();
   ok("player on the road", p.x > r.l && p.x < r.r);
-  ok("player near the bottom", p.y > r.h - 200);
+  ok("player near the bottom of the FIELD", p.y > r.ph - 200 && p.y < r.ph);
+  ok("the deck takes the bottom strip", r.stripH >= 120 && r.ph < r.h);
+  ok("player is NOT in the deck", p.y + T.cfg.PLAYER_H / 2 <= r.ph + 2);
 }
 
 // ---- distance accumulates, faster = more miles ----
@@ -239,6 +241,98 @@ T.start();
   eq("car ahead placed", T.debug.cars().length, 1);
   steps(30);
   eq("blaster zaps the car ahead", T.debug.cars().length, 0);
+}
+
+// ---- speed range: slow is a crawl, fast is REALLY fast ----
+T.start();
+T.debug.setSpeed(0);
+ok("slow means slow (<110 px/s)", T.debug.worldSpeed() < 110);
+T.debug.setSpeed(1);
+ok("fast means fast (>650 px/s)", T.debug.worldSpeed() > 650);
+
+// ---- background music: on at start, steps advance, notes sound ----
+T.start();
+eq("music turns on with the game", T.musicOn, true);
+{
+  const s0 = T.musicStep, a0 = audioCalls.length;
+  steps(200); // ~3.2s of play
+  ok("music steps advance", T.musicStep > s0 + 8);
+  ok("music produces notes", audioCalls.length > a0 + 10);
+}
+
+// ---- ramp: hit it and FLY — no crashes while airborne ----
+T.start();
+{
+  const p = T.debug.player();
+  T.debug.placeThing("ramp", p.x, p.y, { w: 84, h: 40 });
+  T.step(0.016);
+  ok("ramp launches you", p.jumpT > 0.5);
+  T.debug.placeCar(p.x, p.y, { rel: 0.5 });
+  steps(10);
+  eq("no crash while airborne", p.spinT, 0);
+  steps(60); // ~1s: landed by now
+  ok("you land after the jump", p.jumpT <= 0);
+}
+
+// ---- cow: a crash, a moo, and the cow stays put ----
+T.start();
+{
+  const p = T.debug.player();
+  const cow = T.debug.placeThing("cow", p.x, p.y, { w: 78, h: 54 });
+  const cowY = cow.y;
+  T.step(0.016);
+  ok("hitting the cow spins you out", p.spinT > 0);
+  ok("the cow is startled", cow.startled > 0);
+  ok("the cow does not fly away", Math.abs(cow.y - cowY) < 30);
+}
+
+// ---- crab: scuttles off like the chicken ----
+T.start();
+{
+  const p = T.debug.player();
+  const crab = T.debug.placeThing("crab", p.x, p.y, { w: 44, h: 28, vx: 150 });
+  T.step(0.016);
+  ok("crab scuttles away when reached", crab.leapt > 0);
+  eq("crab doesn't spin you", p.spinT, 0);
+}
+
+// ---- seagull: flies right over you, totally harmless ----
+T.start();
+{
+  const p = T.debug.player();
+  T.debug.placeThing("gull", p.x, p.y, { w: 52, h: 24, vx: 190 });
+  steps(5);
+  eq("gull never crashes you", p.spinT, 0);
+}
+
+// ---- tumbleweed: bounces off like the beach ball ----
+T.start();
+{
+  const p = T.debug.player();
+  const tw = T.debug.placeThing("tumbleweed", p.x + 10, p.y, { w: 46, h: 46, vx: -60 });
+  T.step(0.016);
+  ok("tumbleweed bounces away", tw.vx > 0);
+  eq("tumbleweed doesn't crash you", p.spinT, 0);
+}
+
+// ---- sunbather: spin out (they sat up in the road!) ----
+T.start();
+{
+  const p = T.debug.player();
+  const sb = T.debug.placeThing("sunbather", p.x, p.y, { w: 66, h: 66 });
+  T.step(0.016);
+  ok("sunbather spins you", p.spinT > 0);
+  ok("sunbather sits up startled", sb.startled > 0);
+}
+
+// ---- skateboarder: a crash, and he wipes out sideways ----
+T.start();
+{
+  const p = T.debug.player();
+  const sk = T.debug.placeThing("skater", p.x, p.y, { w: 32, h: 54 });
+  T.step(0.016);
+  ok("hitting the skater spins you out", p.spinT > 0);
+  ok("the skater wipes out", sk.knocked > 0);
 }
 
 // ---- level flow: finish L1 -> celebration -> tap -> L2, new car ----

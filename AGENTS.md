@@ -44,6 +44,11 @@ How we work on this site. Both human developers and their agents follow this.
   (respawn) and continue with progress intact (score, level, items kept).
   Death should pause the game or break momentum briefly (~1-2s), but the
   player never starts over and never sees a "game over" screen.
+- Background music: every game gets a music loop (Juan, 2026-10-22:
+  "video games need background music"). Keep it under the sound effects.
+- Controls must never hide the action under the player's thumb: put the
+  control in its own zone (e.g. a deck at the bottom) with the play
+  field above it (Time Wings rule 2026-10-19, Crazy Traffic 2026-10-22).
 
 ## Deploy checklist (manual zip path)
 - Build from a COPY of the source (never stamp the source tree): use
