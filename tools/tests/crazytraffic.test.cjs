@@ -135,6 +135,7 @@ ok("traffic spawns", T.debug.cars().length > 0);
   const r = T.debug.road();
   let allIn = true, anyFell = false;
   for (const c of T.debug.cars()) {
+    if (c.knocked > 0) continue; // knocked cars fly off the road ON PURPOSE
     if (c.x < r.l + 20 || c.x > r.r - 20) allIn = false;
     if (c.y > -60) anyFell = true;
   }
