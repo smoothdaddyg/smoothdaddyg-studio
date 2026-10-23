@@ -255,9 +255,9 @@ T.start();
 eq("music turns on with the game", T.musicOn, true);
 {
   const s0 = T.musicStep, a0 = audioCalls.length;
-  steps(200); // ~3.2s of play
-  ok("music steps advance", T.musicStep > s0 + 8);
-  ok("music produces notes", audioCalls.length > a0 + 10);
+  steps(400); // ~6.4s of play = ~22 sequencer steps (hats alone guarantee notes)
+  ok("music steps advance", T.musicStep > s0 + 15);
+  ok("music produces notes", audioCalls.length > a0 + 12);
 }
 
 // ---- ramp: hit it and FLY — no crashes while airborne ----
