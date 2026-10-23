@@ -6,7 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
-- Bob — 2026-10-22 — Music pass #1: add shared `makeMusic(cfg)` step-sequencer to `js/chiptune.js` (additive only) and give Passing Frenzy the first background loop (his rule: every game gets music). Ship it, then propose the rollout order.
+- Bob — 2026-10-22 — Music pass #1: add shared `makeMusic(cfg)` step-sequencer to `js/chiptune.js` (additive only) and give Passing Frenzy the first background loop (his rule: every game gets music). Committed locally as 71469f9 (82/82 tests, full suite 638 green); `git push origin main` blocked by flaky GitHub transport in the background stage — push from the main session, then curl-verify the live game.js carries the new `?v=` stamp and `MUSIC_CFG`, and move this to Done.
 
 ## Up next
 - (add tasks here)
