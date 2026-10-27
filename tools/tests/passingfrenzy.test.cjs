@@ -4,7 +4,9 @@
    steal scoring + bottom reset, shot-clock violation (no red points, bottom
    reset), beep warnings in the final 0.5s, pass resetting the clock,
    both teams streaming BOTH ways (up/down mix), off-screen recycling,
-   and carrier-runoff turnovers.
+   carrier-runoff turnovers, and the 3 levels (2026-10-26): winning L1
+   advances to L2, winning L2 advances to L3, winning L3 is the finale,
+   and a red level win replays the same level (no game over).
    Run: node tools/tests/passingfrenzy.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -96,24 +98,59 @@ for (let i = 0; i < 120; i++) F.step(0.016);
 ok("players still exist after 2s", F.players >= 10);
 eq("state still play", F.state, "play");
 
-// scoring: force blue to 8, then score to reach 10 -> win
+// LEVELS (2026-10-26): three levels — harder, faster, more people each.
 // (forceScore sets the score then triggers a basket which adds 2)
+eq("3 levels", F.levels.length, 3);
+eq("level 1: 6 blue / 4 red, 40-140", F.levels[0].blue + "/" + F.levels[0].red + "/" + F.levels[0].min + "-" + F.levels[0].max, "6/4/40-140");
+eq("level 2: 8 blue / 6 red, 70-190", F.levels[1].blue + "/" + F.levels[1].red + "/" + F.levels[1].min + "-" + F.levels[1].max, "8/6/70-190");
+eq("level 3: 10 blue / 8 red, 100-240", F.levels[2].blue + "/" + F.levels[2].red + "/" + F.levels[2].min + "-" + F.levels[2].max, "10/8/100-240");
+
+// winning level 1 advances to level 2 (NOT the win screen)
 F.start();
+eq("starts at level 1", F.level, 1);
 parkReds();
 F.forceScore("blue", 6); // 6 + 2 = 8
 eq("blue at 8", F.blueScore, 8);
-F.step(2.0); // let celebrate finish -> back to play
+F.step(2.0); // celebrate finishes -> back to play (no winner yet)
 eq("back to play after celebrate", F.state, "play");
-F.forceScore("blue", 8); // 8 + 2 = 10 -> win
-eq("blue wins at 10", F.blueScore, 10);
-// celebrate comes before win
-ok("celebrate or win after 10", F.state === "celebrate" || F.state === "win");
-F.step(2.0);
-eq("state is win", F.state, "win");
+F.forceScore("blue", 8); // 8 + 2 = 10 -> level 1 won
+eq("blue wins level 1 at 10", F.blueScore, 10);
+F.step(2.0); // celebrate finishes -> levelup splash
+eq("levelup splash after level 1 win", F.state, "levelup");
+eq("level is now 2", F.level, 2);
+let lvlGuard = 0;
+while (F.state !== "play" && lvlGuard++ < 40) F.step(0.1); // splash finishes -> level 2
+eq("level 2 in play", F.state, "play");
+eq("scores reset for level 2", F.blueScore + F.redScore, 0);
+ok("level 2 has more players", F.players >= 14);
+ok("level 2 speeds in 70-190", allPlayers().every((p) => p.speed >= 70 && p.speed <= 190));
 
-// play again resets
+// winning level 2 advances to level 3
+parkReds();
+F.forceScore("blue", 8); // 8 + 2 = 10 -> level 2 won
+F.step(2.0);
+eq("levelup splash after level 2 win", F.state, "levelup");
+eq("level is now 3", F.level, 3);
+lvlGuard = 0;
+while (F.state !== "play" && lvlGuard++ < 40) F.step(0.1);
+eq("level 3 in play", F.state, "play");
+eq("scores reset for level 3", F.blueScore + F.redScore, 0);
+ok("level 3 has more players", F.players >= 18);
+ok("level 3 speeds in 100-240", allPlayers().every((p) => p.speed >= 100 && p.speed <= 240));
+
+// winning level 3 IS the win (grand finale)
+parkReds();
+F.forceScore("blue", 8); // 8 + 2 = 10 -> finale win
+eq("blue wins level 3 at 10", F.blueScore, 10);
+// celebrate comes before win
+ok("celebrate or win after finale", F.state === "celebrate" || F.state === "win");
+F.step(2.0);
+eq("state is win after finale", F.state, "win");
+
+// play again resets to level 1
 F.start();
 eq("restart -> play", F.state, "play");
+eq("restart -> level 1", F.level, 1);
 eq("scores reset", F.blueScore + F.redScore, 0);
 
 // red can win too
@@ -123,6 +160,13 @@ F.forceScore("red", 8); // 8 + 2 = 10
 eq("red wins at 10", F.redScore, 10);
 F.step(2.0);
 eq("state is win (red)", F.state, "win");
+
+// red winning a level is NOT game over — TRY AGAIN replays the same level
+// (sandbox 400x700: play button x=76..324, y=434..518, center 200,476)
+F.tap(200, 476);
+eq("try again -> play", F.state, "play");
+eq("try again replays the same level", F.level, 1);
+eq("scores reset on try again", F.blueScore + F.redScore, 0);
 
 // config sanity
 ok("win score is 10", F.cfg.WIN_SCORE === 10);

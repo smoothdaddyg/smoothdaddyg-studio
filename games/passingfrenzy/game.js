@@ -10,6 +10,10 @@
    moving. Hold it more than 4 seconds and the shot clock takes it
    (watch the ring shrink, listen for the beeps). No fouls, no
    losing on a mistake — just pure passing fun.
+   Three levels (2026-10-26): L1 = 6 blue / 4 red, 40–140 px/s;
+   L2 = 8 / 6, 70–190; L3 = 10 / 8, 100–240. First to 10 wins a
+   level; red winning a level just replays it, blue winning L3 is
+   the finale.
    Music pass #1 (2026-10-22): a bouncy streetball background loop
    under the SFX, via the shared audio.makeMusic() sequencer.
    ============================================================ */
@@ -42,6 +46,18 @@
     SPAWN_MARGIN: 36,     // players spawn/despawn this far off-screen
   };
 
+  /* Three levels — his spec (2026-10-26): "Hard and harder. Faster and
+     faster. More people at each level." Level 1 is the current game;
+     each level adds players to BOTH teams and raises the speed range.
+     First to 10 wins a level; blue winning level 3 is the grand finale;
+     red winning a level just replays that level (no game over, ever). */
+  const LEVELS = [
+    { blue: CFG.BLUE_COUNT, red: CFG.RED_COUNT, min: CFG.SPEED_MIN, max: CFG.SPEED_MAX },
+    { blue: 8, red: 6, min: 70, max: 190 },
+    { blue: 10, red: 8, min: 100, max: 240 },
+  ];
+  function levelCfg() { return LEVELS[level - 1]; }
+
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
@@ -69,8 +85,10 @@
 
   let W = 0, H = 0, DPR = 1, time = 0;
 
-  // state: 'title' | 'play' | 'celebrate' | 'win'
+  // state: 'title' | 'play' | 'celebrate' | 'levelup' | 'win'
   let state = "title";
+  let level = 1;               // current level (1..LEVELS.length)
+  let levelSplashT = 0;        // level-up splash timer (s)
   let blueScore = 0, redScore = 0;
   let winner = null;           // 'blue' | 'red'
   let celebrateT = 0;
@@ -100,7 +118,8 @@
   function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
 
   function ballSpeed() {
-    return ((CFG.SPEED_MIN + CFG.SPEED_MAX) / 2) * CFG.BALL_MUL;
+    const lv = levelCfg();
+    return ((lv.min + lv.max) / 2) * CFG.BALL_MUL;
   }
 
   function addPart(p) {
@@ -152,10 +171,10 @@
 
   /* ---------------- players ---------------- */
   function spawnPlayer(team, withBall, forceDir) {
-    // reds span the same speed range as blue: slow joggers to real sprinters
-    const lo = team === "red" ? CFG.RED_SPEED_MIN : CFG.SPEED_MIN;
-    const hi = team === "red" ? CFG.RED_SPEED_MAX : CFG.SPEED_MAX;
-    const speed = rnd(lo, hi);
+    // both teams span the CURRENT level's speed range: slow joggers to
+    // real sprinters, faster every level
+    const lv = levelCfg();
+    const speed = rnd(lv.min, lv.max);
     // both teams stream BOTH ways: each player gets a randomized vertical
     // direction (dir -1 = up, +1 = down) and enters from the edge behind
     // them. forceDir (-1 | 1) overrides the coin flip when the caller needs
@@ -184,12 +203,13 @@
   }
 
   function keepRoster() {
+    const lv = levelCfg();
     let nb = 0, nr = 0;
     for (const p of players) {
       if (p.team === "blue") nb++; else nr++;
     }
-    if (nb < CFG.BLUE_COUNT) spawnPlayer("blue", false);
-    if (nr < CFG.RED_COUNT) spawnPlayer("red", false);
+    if (nb < lv.blue) spawnPlayer("blue", false);
+    if (nr < lv.red) spawnPlayer("red", false);
   }
 
   /* Give `team` the ball with a fresh player. Blue always enters from the
@@ -381,7 +401,10 @@
     if (state === "title" || state === "win") {
       if (x >= playBtn.x && x <= playBtn.x + playBtn.w &&
           y >= playBtn.y && y <= playBtn.y + playBtn.h) {
-        startGame();
+        // red winning a level is NOT game over — TRY AGAIN replays the
+        // same level; a full blue victory restarts from level 1
+        if (state === "win" && winner === "red") startLevel(level);
+        else startGame();
       }
       return;
     }
@@ -402,23 +425,29 @@
   });
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
-  function startGame() {
+  function startLevel(n) {
+    level = n;
     blueScore = 0; redScore = 0; winner = null; scoredBy = null;
     players = []; parts = []; rings = [];
     ball = { mode: "none", x: 0, y: 0, carrier: null,
              tx: 0, ty: 0, dx: 0, dy: 0, dist: 0,
              shotBy: null, shotTarget: null, thrower: null, throwerT: 0, trail: [],
              possT: 0, beepT: 0 };
-    for (let i = 0; i < CFG.BLUE_COUNT; i++) {
+    const lv = levelCfg();
+    for (let i = 0; i < lv.blue; i++) {
       const p = spawnPlayer("blue", false);
       p.y = rnd(-CFG.SPAWN_MARGIN, H + CFG.SPAWN_MARGIN); // scatter them up the court
     }
-    for (let i = 0; i < CFG.RED_COUNT; i++) {
+    for (let i = 0; i < lv.red; i++) {
       const p = spawnPlayer("red", false);
       p.y = rnd(-CFG.SPAWN_MARGIN, H + CFG.SPAWN_MARGIN);
     }
     resetBallToEdge("blue"); // human starts with the ball
     state = "play";
+  }
+
+  function startGame() {
+    startLevel(1);
     music.start();
     if (window.SDGplays) window.SDGplays.played("passingfrenzy");
     audio.arp([392, 523, 659], 0.08, "square", 0.10);
@@ -457,7 +486,7 @@
         }
       }
     }
-    if (state === "play" || state === "title" || state === "celebrate" || state === "win") keepRoster();
+    if (state === "play" || state === "title" || state === "celebrate" || state === "levelup" || state === "win") keepRoster();
 
     if (state === "play" || state === "celebrate") updateBall(dt);
 
@@ -466,18 +495,37 @@
       celebrateT -= dt;
       if (celebrateT <= 0) {
         if (winner) {
-          state = "win";
-          if (winner === "blue") {
-            confettiBlast(W / 2, H * 0.4, 160);
-            audio.arp([523, 587, 659, 784, 880, 1047, 1175, 1319, 1568], 0.11, "square", 0.12);
+          if (winner === "blue" && level < LEVELS.length) {
+            // level cleared — splash, then the next (harder, faster,
+            // more crowded) level starts
+            level++;
+            state = "levelup";
+            levelSplashT = 1.5;
+            confettiBlast(W / 2, H * 0.4, 90);
+            audio.arp([523, 659, 784, 1047], 0.09, "square", 0.12);
           } else {
-            audio.arp([392, 370, 349, 311], 0.14, "triangle", 0.10);
+            state = "win";
+            if (winner === "blue") {
+              confettiBlast(W / 2, H * 0.4, 160);
+              audio.arp([523, 587, 659, 784, 880, 1047, 1175, 1319, 1568], 0.11, "square", 0.12);
+            } else {
+              audio.arp([392, 370, 349, 311], 0.14, "triangle", 0.10);
+            }
           }
         } else {
           resetBallToEdge("blue"); // blue always has the ball
           state = "play";
         }
       }
+    }
+
+    // level-up splash beat, then the next level starts.
+    // else-if on purpose: a splash entered THIS tick (from celebrate)
+    // must not also count down this tick, or one big step would skip
+    // the splash entirely.
+    else if (state === "levelup") {
+      levelSplashT -= dt;
+      if (levelSplashT <= 0) startLevel(level);
     }
 
     // particles
@@ -690,7 +738,7 @@
     ctx.fillText("FRENZY", W / 2, H * 0.44 + 44);
     ctx.font = "13px 'Press Start 2P', monospace";
     ctx.fillStyle = "#9be8ff";
-    ctx.fillText("TAP TO PASS - FIRST TO 10", W / 2, H * 0.44 + 84);
+    ctx.fillText("TAP TO PASS - WIN 3 LEVELS", W / 2, H * 0.44 + 84);
     ctx.textAlign = "left";
     bigButton("PLAY");
   }
@@ -710,9 +758,13 @@
       ctx.font = "12px 'Press Start 2P', monospace";
       ctx.fillStyle = "#9be8ff";
       ctx.fillText("GOOD GAME - RUN IT BACK!", W / 2, H * 0.34 + 88);
+    } else {
+      ctx.font = "12px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#9be8ff";
+      ctx.fillText("3 LEVELS CLEARED!", W / 2, H * 0.34 + 88);
     }
     ctx.textAlign = "left";
-    bigButton("PLAY AGAIN");
+    bigButton(blueWon ? "PLAY AGAIN" : "TRY AGAIN");
   }
 
   function drawParts() {
@@ -743,6 +795,11 @@
     drawShotClock();
     drawParts();
     drawScoreboard();
+    // current level as one big digit, top center between the scores —
+    // no words, just the number
+    if (state === "play" || state === "celebrate" || state === "levelup") {
+      drawPixelNumber(ctx, level, W / 2, 38, 5, "#ffffff", true);
+    }
     if (state === "title") drawTitle();
     else if (state === "win") drawWin();
     else if (state === "celebrate") {
@@ -752,6 +809,17 @@
       ctx.strokeStyle = "rgba(255,225,77," + a.toFixed(2) + ")";
       ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(b.x, b.y, 34, 0, 6.2832); ctx.stroke();
+    } else if (state === "levelup") {
+      ctx.fillStyle = "rgba(4,8,18,0.45)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "34px 'Press Start 2P', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("LEVEL " + level + "!", W / 2, H * 0.40);
+      ctx.font = "13px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#9be8ff";
+      ctx.fillText("FASTER - MORE PLAYERS", W / 2, H * 0.40 + 44);
+      ctx.textAlign = "left";
     }
   }
 
@@ -769,12 +837,12 @@
   }
 
   resize();
-  // pre-scatter players so the title screen is alive
-  for (let i = 0; i < CFG.BLUE_COUNT; i++) {
+  // pre-scatter players so the title screen is alive (level 1 roster)
+  for (let i = 0; i < LEVELS[0].blue; i++) {
     const p = spawnPlayer("blue", false);
     p.y = rnd(0, H);
   }
-  for (let i = 0; i < CFG.RED_COUNT; i++) {
+  for (let i = 0; i < LEVELS[0].red; i++) {
     const p = spawnPlayer("red", false);
     p.y = rnd(0, H);
   }
@@ -784,6 +852,8 @@
      and inspect the ball — test-only, never used by the game itself. */
   window.__frenzyTest = {
     get state() { return state; },
+    get level() { return level; },
+    get levels() { return LEVELS; },
     get blueScore() { return blueScore; },
     get redScore() { return redScore; },
     get players() { return players.length; },

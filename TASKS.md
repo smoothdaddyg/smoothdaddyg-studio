@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- 2026-10-26 — Passing Frenzy levels (his spec: "Three levels. Hard and harder. Faster and faster. More people at each level."): L1 = current game (6 blue / 4 red, 40–140 px/s), L2 = 8/6, 70–190, L3 = 10/8, 100–240; first to 10 wins a level, blue winning L3 is the finale, red winning a level replays that level (no game over).
 
 ## Up next
 - (add tasks here)
