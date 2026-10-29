@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- Crazy Traffic chiptune + quick levels (his 2026-10-29 call: the old funk loop "is not working" — he wants real 8-bit/16-bit arcade chiptune, free with no attribution; his pick: our own composition, not a downloaded pack): original 140 BPM chiptune loop in games/crazytraffic/game.js (square lead, triangle bass, noise drums, fast arp turnaround, 64 sixteenth steps), levels cut to max ~30s at cruise (miles 1.0–1.4, MILES_RATE 0.06), surprise events roughly twice as often with wacky crossers weighted over hazards.
 
 ## Up next
 - (add tasks here)

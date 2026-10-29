@@ -46,6 +46,15 @@ How we work on this site. Both human developers and their agents follow this.
   player never starts over and never sees a "game over" screen.
 - Background music: every game gets a music loop (Juan, 2026-10-22:
   "video games need background music"). Keep it under the sound effects.
+  The sound is 8-bit/16-bit arcade chiptune (Juan, 2026-10-29 — the
+  funk/hip-hop loops "are not working"): square-wave lead, triangle
+  bass, noise drums, fast arpeggios. Compose it in-house — original,
+  free, no attribution owed to anyone. Never ship a downloaded or
+  licensed track, and never use an AI generator's "royalty-free"
+  output (plan-rights caveats fail the clean bar).
+- Pace: levels run short and surprises come often — short attention
+  spans, keep it moving, keep something unexpected happening
+  (Crazy Traffic, 2026-10-29: every level max ~30s at cruise).
 - Controls must never hide the action under the player's thumb: put the
   control in its own zone (e.g. a deck at the bottom) with the play
   field above it (Time Wings rule 2026-10-19, Crazy Traffic 2026-10-22).

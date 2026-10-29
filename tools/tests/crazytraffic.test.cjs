@@ -66,6 +66,14 @@ eq("5 levels", T.levels.length, 5);
 ok("miles increase per level", T.levels.every((l, i) => i === 0 || l.miles > T.levels[i - 1].miles));
 ok("traffic cap grows", T.levels[4].cars > T.levels[0].cars);
 
+// ---- short levels: every level finishes inside 30s at cruise ----
+{
+  const rate = T.cfg.MILES_RATE * (0.35 + T.cfg.CRUISE);
+  ok("every level runs max ~30s at cruise", T.levels.every((l) => l.miles / rate <= 30));
+  ok("events come often (max gap 3.5s)", T.levels.every((l) => l.event <= 3.5));
+  ok("later levels throw surprises faster", T.levels[4].event < T.levels[0].event);
+}
+
 // ---- title -> start ----
 eq("starts on title", T.state, "title");
 T.start();
@@ -256,9 +264,12 @@ T.start();
 eq("music turns on with the game", T.musicOn, true);
 {
   const s0 = T.musicStep, a0 = audioCalls.length;
-  steps(400); // ~6.4s of play = ~22 sequencer steps (hats alone guarantee notes)
-  ok("music steps advance", T.musicStep > s0 + 15);
+  steps(400); // ~6.4s of play = ~59 sequencer steps at 140 BPM 16ths
+  ok("music steps advance", T.musicStep > s0 + 40);
   ok("music produces notes", audioCalls.length > a0 + 12);
+  const calls = audioCalls.slice(a0);
+  ok("chiptune: square-wave lead", calls.some((c) => c[0] === "tone" && c[3] && c[3].type === "square" && c[3].vol === 0.055));
+  ok("chiptune: triangle bass", calls.some((c) => c[0] === "tone" && c[3] && c[3].type === "triangle" && c[3].vol === 0.13));
 }
 
 // ---- ramp: hit it and FLY — no crashes while airborne ----

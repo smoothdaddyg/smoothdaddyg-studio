@@ -18,16 +18,21 @@
    daughter is left-handed — no fixed-side controls, ever;
    the old Race game died on exactly that).
 
-   MUSIC: a groovy funk loop runs under the play (his rule:
-   video games need background music — every game, going
-   forward). And it's Beach-Buggy wacky: jump ramps that launch
+   MUSIC: an original 8-bit chiptune loop runs under the play
+   (his rule: video games need background music — every game,
+   going forward; his 2026-10-29 call: real arcade chiptune,
+   composed here, free with no attribution to anyone). And
+   it's Beach-Buggy wacky: jump ramps that launch
    you OVER traffic, a cow standing in the road, crabs,
    seagulls, tumbleweeds, a sunbather set up in the fast lane,
    and a skateboarder weaving through it all.
 
    5 LEVELS, A NEW CAR EACH LEVEL (the reward: you earn the
    next ride). Each level is a distance — drive the miles on
-   the progress bar to the checkered flag. Crashes spin you
+   the progress bar to the checkered flag, and levels run
+   SHORT (his 2026-10-29 call: max ~30s at cruise — short
+   attention spans, keep it moving, keep surprises coming).
+   Crashes spin you
    out for a second and NEVER cost progress (no-game-over rule).
    ============================================================ */
 "use strict";
@@ -42,7 +47,8 @@
     WORLD_ADD: 640,      // + this * speed01 — fast means REALLY fast (710)
     STEER_MAX: 460,      // lateral px/s at a full stick tilt
     STICK_R: 62,         // stick travel radius, px
-    MILES_RATE: 0.034,   // miles/sec at (0.35 + speed01)
+    MILES_RATE: 0.06,    // miles/sec at (0.35 + speed01) — tuned so a
+                         // level lasts max ~30s at cruise (his 2026-10-29 call)
     GHOST_T: 2.0,        // invincibility seconds after a crash
     SPIN_T: 0.9,         // crash spin-out seconds
     OIL_SPIN_T: 0.7,     // oil/banana spin seconds
@@ -53,12 +59,16 @@
     CAR_W: 56, CAR_H: 92,
   };
   // per-level: miles to drive, traffic cap, spawn gap, event gap
+  // SHORT levels (his 2026-10-29 call): at cruise (0.45) the rate
+  // is 0.06 * 0.80 = 0.048 mi/s, so these run 21/23/25/27/29s —
+  // every level done inside 30 seconds. Events come roughly
+  // twice as often as before — surprises, not empty road.
   const LEVELS = [
-    { miles: 1.5, cars: 3, spawn: 1.55, event: 6.5 },
-    { miles: 2.0, cars: 4, spawn: 1.30, event: 5.6 },
-    { miles: 2.5, cars: 5, spawn: 1.10, event: 4.8 },
-    { miles: 3.0, cars: 6, spawn: 0.95, event: 4.2 },
-    { miles: 3.5, cars: 7, spawn: 0.82, event: 3.6 },
+    { miles: 1.0, cars: 3, spawn: 1.55, event: 3.5 },
+    { miles: 1.1, cars: 4, spawn: 1.30, event: 3.0 },
+    { miles: 1.2, cars: 5, spawn: 1.10, event: 2.6 },
+    { miles: 1.3, cars: 6, spawn: 0.95, event: 2.2 },
+    { miles: 1.4, cars: 7, spawn: 0.82, event: 1.9 },
   ];
   // roadside palettes per level (day -> sand -> dusk -> purple -> night)
   const SIDE_COLORS = ["#3f9e4d", "#c9a86a", "#b06a3b", "#5b4a8a", "#1d2a52"];
@@ -99,32 +109,43 @@
   function sndFinale() { arp([523, 659, 784, 1046, 1318, 1568, 2093], 0.12, "square", 0.11); noiseS(0.8, { filter: "highpass", freq: 3000, vol: 0.05, when: 0.3 }); }
 
   /* ---------------- background music ----------------
-     A groovy little funk loop — his rule (2026-10-22): "video
-     games need background music." A step sequencer under the
-     SFX: triangle bass, kick, hats, and a lazy pentatonic lead.
-     32 steps at 106 BPM, scheduled a step at a time from tick. */
+     An ORIGINAL 8-bit chiptune loop, composed here (his
+     2026-10-29 call: the old arcade sound — free, ours, no
+     attribution to anyone, no downloaded track). The recipe
+     is the real thing: square-wave lead, triangle bass, noise
+     drums, and a fast arpeggio turnaround in bar 4 — the
+     trick old hardware used to fake chords on one channel.
+     64 sixteenth steps at 140 BPM (4 bars: C - G - Am - G),
+     scheduled a step at a time from tick, under the SFX. */
   const MUSIC = {
     on: false, step: 0, t: 0,
-    STEP_DUR: 60 / 106 / 2,
-    BASS: [110, 0, 0, 110, 0, 0, 130.81, 0, 98, 0, 0, 98, 0, 0, 146.83, 0,
-           110, 0, 0, 110, 0, 0, 130.81, 0, 164.81, 0, 146.83, 0, 130.81, 0, 98, 0],
-    LEAD: [0, 0, 440, 0, 523.25, 0, 440, 0, 0, 392, 0, 0, 329.63, 0, 0, 0,
-           0, 0, 440, 0, 659.25, 0, 523.25, 0, 440, 0, 392, 0, 329.63, 0, 0, 0],
+    STEP_DUR: 60 / 140 / 4,
+    // bass: root 8ths with a fifth pop, one bar per chord
+    BASS: [130.81, 0, 130.81, 0, 130.81, 0, 98, 0, 130.81, 0, 130.81, 0, 130.81, 0, 98, 0,
+           98, 0, 98, 0, 98, 0, 146.83, 0, 98, 0, 98, 0, 98, 0, 146.83, 0,
+           110, 0, 110, 0, 110, 0, 164.81, 0, 110, 0, 110, 0, 110, 0, 164.81, 0,
+           98, 0, 98, 0, 98, 0, 146.83, 0, 98, 0, 98, 0, 98, 0, 146.83, 0],
+    // lead: singable hook on 8ths, then a 16th arpeggio run in bar 4
+    LEAD: [659.25, 0, 783.99, 0, 1046.50, 0, 783.99, 0, 659.25, 0, 587.33, 0, 659.25, 0, 783.99, 0,
+           587.33, 0, 783.99, 0, 987.77, 0, 783.99, 0, 587.33, 0, 659.25, 0, 587.33, 0, 493.88, 0,
+           659.25, 0, 880, 0, 1046.50, 0, 880, 0, 659.25, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+           783.99, 987.77, 1174.66, 1567.98, 1174.66, 987.77, 783.99, 987.77,
+           1174.66, 1567.98, 1174.66, 987.77, 783.99, 659.25, 783.99, 0],
   };
   function tickMusic(dt) {
     if (!MUSIC.on) return;
     MUSIC.t += dt;
     while (MUSIC.t >= MUSIC.STEP_DUR) {
       MUSIC.t -= MUSIC.STEP_DUR;
-      const s = MUSIC.step % 32;
+      const s = MUSIC.step % 64;
       MUSIC.step++;
       const b = MUSIC.BASS[s];
-      if (b) tone(b, 0.22, { type: "triangle", vol: 0.15 });
+      if (b) tone(b, 0.2, { type: "triangle", vol: 0.13 });
       const l = MUSIC.LEAD[s];
-      if (l) tone(l, 0.2, { type: "square", vol: 0.032 });
-      if (s % 8 === 0) tone(130, 0.12, { type: "sine", vol: 0.18, slideTo: 42 });
-      if (s % 8 === 4) noiseS(0.09, { filter: "bandpass", freq: 1800, vol: 0.045 });
-      if (s % 2 === 1) noiseS(0.03, { filter: "highpass", freq: 6500, vol: 0.022 });
+      if (l) tone(l, 0.18, { type: "square", vol: 0.055 });
+      if (s % 16 === 0) tone(130, 0.12, { type: "sine", vol: 0.16, slideTo: 42 });
+      if (s % 16 === 8) noiseS(0.09, { filter: "bandpass", freq: 1800, vol: 0.05 });
+      if (s % 2 === 1) noiseS(0.03, { filter: "highpass", freq: 6500, vol: 0.02 });
     }
   }
 
@@ -202,7 +223,7 @@
   function startGame() {
     level = 1; dist = 0; celebT = 0; finishY = -80;
     cars = []; things = []; parts = []; bolts = [];
-    spawnT = 1.2; eventT = 4; speed01 = CFG.CRUISE;
+    spawnT = 1.2; eventT = 2.5; speed01 = CFG.CRUISE;
     resetPlayer();
     state = "play";
     MUSIC.on = true;
@@ -212,7 +233,7 @@
   function nextLevel() {
     level++; dist = 0; celebT = 0; finishY = -80;
     cars = []; things = []; bolts = [];
-    spawnT = 1.2; eventT = 3.5;
+    spawnT = 1.2; eventT = 2.0;
     player.blasterT = 0; player.ghost = 1;
     state = "play";
     arp([392, 523, 659, 784], 0.07, "square", 0.09);
@@ -246,8 +267,12 @@
     });
   }
   function spawnEvent() {
-    const opts = ["oil", "banana", "unicorn", "chicken", "ball", "ramp", "cow", "gull"];
-    if (level >= 2) opts.push("blaster", "blaster", "crab", "tumbleweed", "sunbather");
+    // surprises OUTNUMBER hazards (his 2026-10-29 call: the
+    // unexpected stuff is the point — unicorns, chickens, cows
+    // and beach balls show up far more often than oil/bananas)
+    const opts = ["oil", "banana", "unicorn", "unicorn", "chicken", "chicken",
+                  "ball", "ball", "ramp", "cow", "cow", "gull"];
+    if (level >= 2) opts.push("blaster", "blaster", "crab", "crab", "tumbleweed", "tumbleweed", "sunbather");
     if (level >= 3) opts.push("plane", "skater");
     const kind = opts[(Math.random() * opts.length) | 0];
     if (kind === "oil" || kind === "banana" || kind === "blaster" || kind === "ramp") {
