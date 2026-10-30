@@ -15,6 +15,23 @@
   var canvas = document.getElementById("stage");
   var ctx = canvas.getContext("2d");
   var audio = makeAudio();
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX. Starts at load; the
+     synth stays silent until the first tap, then plays mid-loop. */
+  var MUSIC = audio.makeMusic({
+    bpm: 144, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.05, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [73.42, 0, 0, 73.42, 0, 0, 110, 0, 73.42, 0, 0, 73.42, 146.83, 0, 110, 0,
+           110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0,
+           123.47, 0, 0, 123.47, 0, 0, 185, 0, 123.47, 0, 0, 123.47, 246.94, 0, 185, 0,
+           110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0],
+    lead: [587.33, 0, 659.25, 0, 783.99, 0, 659.25, 0, 587.33, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+           440, 0, 523.25, 0, 659.25, 0, 523.25, 0, 440, 0, 392, 0, 440, 0, 523.25, 0,
+           493.88, 0, 587.33, 0, 659.25, 0, 587.33, 0, 493.88, 0, 440, 0, 493.88, 0, 587.33, 0,
+           587.33, 659.25, 783.99, 880, 783.99, 659.25, 587.33, 659.25, 783.99, 880, 1046.5, 880, 783.99, 659.25, 587.33, 0],
+  });
+  MUSIC.start();
 
   var W = 0, H = 0, DPR = 1;
 
@@ -36,7 +53,7 @@
 
   /* ---------------- state ---------------- */
   var state = "play";        // play | levelup | win
-  var level = 1, baseCount = 6, weather = "sunny";
+  var level = 1, baseCount = 5, weather = "sunny";
   var scroll = 0, worldW = 0;
   var plane = { y: 0, vy: 0, tilt: 0 };
   var planeX = 0, groundY = 0;
@@ -143,7 +160,7 @@
   }
 
   function startLevel() {
-    baseCount = 5 + level;          // 6, 7, 8, 9, 10 targets
+    baseCount = 4 + level;          // 5, 6, 7, 8, 9 targets (2026-10-30: quick levels)
     weather = WEATHERS[level - 1];  // sunny -> cloud -> wind -> rain -> storm
     stopAmbient();
     resetBases();
@@ -915,6 +932,7 @@
   function frame(t) {
     var dt = Math.min(0.05, (t - last) / 1000 || 0.016);
     last = t;
+    if (MUSIC) MUSIC.tick(dt);
     update(dt);
     draw();
     requestAnimationFrame(frame);
@@ -930,7 +948,7 @@
       wrapX: wrapX, zoneAt: zoneAt, inZone: inZone, groundAt: groundAt,
       audioState: function () { return audio.state(); },
       levelInfo: function () {
-        return { level: level, weather: WEATHERS[level - 1], baseCount: 5 + level, levels: LEVELS, concreteEvery: concreteEvery() };
+        return { level: level, weather: WEATHERS[level - 1], baseCount: 4 + level, levels: LEVELS, concreteEvery: concreteEvery() };
       },
       _set: function (o) {
         if (o.scroll != null) scroll = o.scroll;

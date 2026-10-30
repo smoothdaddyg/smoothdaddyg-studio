@@ -25,18 +25,35 @@
     DOG_SPEED_MAX: 300, // cap
     DISC_SPEED: 360,    // frisbee speed px/s — well past the dog (240-300), snappy lead-pass feel
     STRIP_H: 120,       // top UI strip: taps, targets and the dog stay below it
-    RESOLVE_T: 1.0,     // celebration beat after catch / miss (snappy)
+    RESOLVE_T: 0.7,     // celebration beat after catch / miss (2026-10-30 quick rounds, was 1.0)
     READY_T: 0.6,       // "ready" beat: paw-print telegraph, then the whistle
     TURN_MIN: 0.35,     // turn happens 35–70% of the way out — sometimes
     TURN_MAX: 0.70,     // shallow and quick, sometimes deep; never in the strip
     EDGE_M: 40,         // turn runs toward this sideline margin
-    JOG_SPEED: 260,     // jog back to the lineup between rounds
+    JOG_SPEED: 330,     // jog back to the lineup between rounds (2026-10-30: was 260)
     LINEUP_Y: 90,       // dog lines up this far from the bottom
   };
 
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX. Starts at load; the
+     synth stays silent until the first tap, then plays mid-loop. */
+  const MUSIC = audio.makeMusic({
+    bpm: 140, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.05, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
+           82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 82.41, 0, 0, 82.41, 164.81, 0, 123.47, 0,
+           65.41, 0, 0, 65.41, 0, 0, 98, 0, 65.41, 0, 0, 65.41, 130.81, 0, 98, 0,
+           73.42, 0, 0, 73.42, 0, 0, 110, 0, 73.42, 0, 0, 73.42, 146.83, 0, 110, 0],
+    lead: [392, 0, 493.88, 0, 587.33, 0, 659.25, 0, 587.33, 0, 493.88, 0, 392, 0, 493.88, 0,
+           659.25, 0, 587.33, 0, 659.25, 0, 783.99, 0, 659.25, 0, 587.33, 0, 493.88, 0, 587.33, 0,
+           523.25, 0, 659.25, 0, 523.25, 0, 440, 0, 523.25, 0, 392, 0, 440, 0, 523.25, 0,
+           392, 493.88, 587.33, 659.25, 783.99, 659.25, 587.33, 493.88, 587.33, 659.25, 783.99, 880, 783.99, 659.25, 587.33, 0],
+  });
+  MUSIC.start();
 
   let W = 0, H = 0, DPR = 1, time = 0;
 
@@ -804,6 +821,7 @@
     last = now;
     if (dt > 0.05) dt = 0.05;
     if (dt < 0) dt = 0;
+    if (MUSIC) MUSIC.tick(dt);
     tick(dt);
     render();
   }

@@ -26,7 +26,7 @@
     FUSE_R: 46,          // generous proximity fuse — near-misses still hit
     RESPAWN_T: 1.0,      // a hit KILLS you — then you pop back in 1 second
     GRACE_T: 0.8,        // ...plus a brief no-re-kill bubble (forgiving)
-    GOALS: [5, 6, 7],    // ships to sink per level
+    GOALS: [4, 5, 6],    // ships to sink per level (2026-10-30: quick levels, was 5/6/7)
     SHIP_SPEED: [        // per level [min, max]
       [60, 105], [95, 145], [115, 175],
     ],
@@ -49,6 +49,23 @@
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX. Starts at load; the
+     synth stays silent until the first tap, then plays mid-loop. */
+  const MUSIC = audio.makeMusic({
+    bpm: 136, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.05, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [65.41, 0, 0, 65.41, 0, 0, 98, 0, 65.41, 0, 0, 65.41, 130.81, 0, 98, 0,
+           87.31, 0, 0, 87.31, 0, 0, 130.81, 0, 87.31, 0, 0, 87.31, 174.61, 0, 130.81, 0,
+           98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
+           65.41, 0, 0, 65.41, 0, 0, 98, 0, 65.41, 0, 0, 65.41, 130.81, 0, 98, 0],
+    lead: [261.63, 0, 392, 0, 523.25, 0, 392, 0, 261.63, 0, 392, 0, 523.25, 0, 659.25, 0,
+           349.23, 0, 440, 0, 523.25, 0, 440, 0, 349.23, 0, 440, 0, 523.25, 0, 440, 0,
+           392, 0, 493.88, 0, 587.33, 0, 493.88, 0, 392, 0, 493.88, 0, 587.33, 0, 493.88, 0,
+           261.63, 392, 523.25, 659.25, 523.25, 392, 261.63, 392, 523.25, 659.25, 783.99, 659.25, 523.25, 392, 261.63, 0],
+  });
+  MUSIC.start();
 
   let W = 0, H = 0, DPR = 1, time = 0;
   let WL = 0; // waterline y — ships sail here, sky above, ocean below
@@ -1048,6 +1065,7 @@
   function frame(ts) {
     const dt = Math.min(0.05, last ? (ts - last) / 1000 : 0.016);
     last = ts;
+    if (MUSIC) MUSIC.tick(dt);
     update(dt);
     draw();
     requestAnimationFrame(frame);

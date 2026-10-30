@@ -127,13 +127,18 @@ function makeAudio() {
      per step), bassType ("triangle"), leadType ("square"), bassVol,
      leadVol, kickEvery (steps between kicks, default 8, 0 = none),
      snareOff (default 4, null = none), hats ("odd"|"all"|"none"),
-     kickVol, snareVol, hatVol. Tones schedule through tone()/noise(),
+     kickVol, snareVol, hatVol. Funk upgrade (2026-10-30): div (steps
+     per beat, default 2 = 8ths; 4 = 16ths for syncopation) and explicit
+     kicks[] / snares[] (step indices mod steps; when present they
+     replace kickEvery / snareOff). Old configs without div/kicks/snares
+     behave exactly as before. Tones schedule through tone()/noise(),
      so pre-gesture calls stay silent and the step clock still runs.
      Returns { tick(dt), start(), stop(), on, step }. */
   function makeMusic(cfg) {
     cfg = cfg || {};
     const steps = cfg.steps || 32;
-    const m = { on: false, step: 0, t: 0, STEP_DUR: 60 / (cfg.bpm || 100) / 2 };
+    const div = cfg.div || 2;
+    const m = { on: false, step: 0, t: 0, STEP_DUR: 60 / (cfg.bpm || 100) / div };
     function tick(dt) {
       if (!m.on) return;
       m.t += dt;
@@ -146,9 +151,11 @@ function makeAudio() {
         const l = cfg.lead && cfg.lead[s];
         if (l) tone(l, 0.2, { type: cfg.leadType || "square", vol: cfg.leadVol != null ? cfg.leadVol : 0.03 });
         const ke = cfg.kickEvery != null ? cfg.kickEvery : 8;
-        if (ke && s % ke === 0) tone(cfg.kickFreq || 130, 0.12, { type: "sine", vol: cfg.kickVol != null ? cfg.kickVol : 0.16, slideTo: 42 });
+        const kickHere = cfg.kicks ? cfg.kicks.indexOf(s) !== -1 : (ke && s % ke === 0);
+        if (kickHere) tone(cfg.kickFreq || 130, 0.12, { type: "sine", vol: cfg.kickVol != null ? cfg.kickVol : 0.16, slideTo: 42 });
         const so = cfg.snareOff !== undefined ? cfg.snareOff : 4;
-        if (ke && so != null && s % ke === so) noise(0.09, { filter: "bandpass", freq: 1800, vol: cfg.snareVol != null ? cfg.snareVol : 0.04 });
+        const snareHere = cfg.snares ? cfg.snares.indexOf(s) !== -1 : (ke && so != null && s % ke === so);
+        if (snareHere) noise(0.09, { filter: "bandpass", freq: 1800, vol: cfg.snareVol != null ? cfg.snareVol : 0.04 });
         const hats = cfg.hats || "odd";
         if ((hats === "odd" && s % 2 === 1) || hats === "all") noise(0.03, { filter: "highpass", freq: 6500, vol: cfg.hatVol != null ? cfg.hatVol : 0.02 });
       }

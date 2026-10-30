@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- 2026-10-30 — Music + pace + escalation rollout to all 20 games (his 2026-10-30 verdicts: Crazy Traffic chiptune "good," more bass + funkier; fast levels "awesome" — "that causes u to stick with the game longer"; each level crazier — "what the fuck! That's cool" moments to tell a friend about). Shared makeMusic gains div (16ths) + kicks[]/snares[]; Crazy Traffic retuned (bass vol 0.2, syncopated funk bass, snare on 2 and 4); 17 new original chiptune loops (Passing Frenzy's boom-bap replaced; Dance Judge keeps its own per-style grooves; Crazy Traffic keeps its bespoke loop); quicker levels (Blitz 5–9 bases, Sink 4/5/6, Time Wings 8/10/12/14, Passing Frenzy first to 7, Frisbee Dog snappier rounds; Miss Munch untouched — calm pace tuned for his daughter); Passing Frenzy L3 gold ball + double confetti. About page gains a Divisions section (Sound, Graphics, Design, Engineering).
 
 ## Up next
 - (add tasks here)

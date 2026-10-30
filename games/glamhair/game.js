@@ -21,6 +21,23 @@
   var ctx = canvas.getContext("2d");
   var W = 0, H = 0, DPR = 1;
   var audio = (typeof makeAudio === "function") ? makeAudio() : null;
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX. Starts at load; the
+     synth stays silent until the first tap, then plays mid-loop. */
+  var MUSIC = audio ? audio.makeMusic({
+    bpm: 132, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.05, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [87.31, 0, 0, 87.31, 0, 0, 130.81, 0, 87.31, 0, 0, 87.31, 174.61, 0, 130.81, 0,
+           73.42, 0, 0, 73.42, 0, 0, 110, 0, 73.42, 0, 0, 73.42, 146.83, 0, 110, 0,
+           116.54, 0, 0, 116.54, 0, 0, 174.61, 0, 116.54, 0, 0, 116.54, 233.08, 0, 174.61, 0,
+           65.41, 0, 0, 65.41, 0, 0, 98, 0, 65.41, 0, 0, 65.41, 130.81, 0, 98, 0],
+    lead: [698.46, 0, 880, 0, 698.46, 0, 523.25, 0, 698.46, 0, 880, 0, 1046.5, 0, 880, 0,
+           587.33, 0, 698.46, 0, 880, 0, 698.46, 0, 587.33, 0, 523.25, 0, 587.33, 0, 698.46, 0,
+           698.46, 0, 880, 0, 1046.5, 0, 880, 0, 698.46, 0, 587.33, 0, 698.46, 0, 880, 0,
+           698.46, 880, 1046.5, 1174.66, 1046.5, 880, 698.46, 880, 1046.5, 1174.66, 1318.51, 1174.66, 1046.5, 880, 698.46, 0],
+  }) : null;
+  if (MUSIC) MUSIC.start();
 
   function beep(fn) { try { if (audio && audio.unlock) audio.unlock(); if (fn) fn(); } catch (e) {} }
   function tone(f, d, o) { beep(function () { audio.tone(f, d, o); }); }
@@ -1164,6 +1181,7 @@
   function frame(t) {
     var dt = Math.min(0.05, (t - (frame.last || t)) / 1000 || 0.016);
     frame.last = t;
+    if (MUSIC) MUSIC.tick(dt);
     update(dt);
     drawBG();
     drawBackHair();

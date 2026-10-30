@@ -120,11 +120,13 @@
   const MUSIC = {
     on: false, step: 0, t: 0,
     STEP_DUR: 60 / 140 / 4,
-    // bass: root 8ths with a fifth pop, one bar per chord
-    BASS: [130.81, 0, 130.81, 0, 130.81, 0, 98, 0, 130.81, 0, 130.81, 0, 130.81, 0, 98, 0,
-           98, 0, 98, 0, 98, 0, 146.83, 0, 98, 0, 98, 0, 98, 0, 146.83, 0,
-           110, 0, 110, 0, 110, 0, 164.81, 0, 110, 0, 110, 0, 110, 0, 164.81, 0,
-           98, 0, 98, 0, 98, 0, 146.83, 0, 98, 0, 98, 0, 98, 0, 146.83, 0],
+    // bass: LOUD syncopated funk line, one bar per chord — root on the
+    // beat, octave/fifth pops on the off-16ths (his 2026-10-30 note:
+    // "more bass and a bit more funkier")
+    BASS: [130.81, 0, 0, 130.81, 0, 0, 98, 0, 130.81, 0, 0, 130.81, 261.63, 0, 98, 0,
+           98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
+           110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0,
+           98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0],
     // lead: singable hook on 8ths, then a 16th arpeggio run in bar 4
     LEAD: [659.25, 0, 783.99, 0, 1046.50, 0, 783.99, 0, 659.25, 0, 587.33, 0, 659.25, 0, 783.99, 0,
            587.33, 0, 783.99, 0, 987.77, 0, 783.99, 0, 587.33, 0, 659.25, 0, 587.33, 0, 493.88, 0,
@@ -140,11 +142,14 @@
       const s = MUSIC.step % 64;
       MUSIC.step++;
       const b = MUSIC.BASS[s];
-      if (b) tone(b, 0.2, { type: "triangle", vol: 0.13 });
+      if (b) tone(b, 0.2, { type: "triangle", vol: 0.2 });
       const l = MUSIC.LEAD[s];
       if (l) tone(l, 0.18, { type: "square", vol: 0.055 });
-      if (s % 16 === 0) tone(130, 0.12, { type: "sine", vol: 0.16, slideTo: 42 });
-      if (s % 16 === 8) noiseS(0.09, { filter: "bandpass", freq: 1800, vol: 0.05 });
+      // funk groove: kick on 1 and 3 + a ghost kick into the next bar,
+      // snare on 2 and 4 (was snare only on 3)
+      if (s % 16 === 0 || s % 16 === 8) tone(130, 0.12, { type: "sine", vol: 0.16, slideTo: 42 });
+      if (s % 16 === 14) tone(130, 0.1, { type: "sine", vol: 0.1, slideTo: 42 });
+      if (s % 16 === 4 || s % 16 === 12) noiseS(0.09, { filter: "bandpass", freq: 1800, vol: 0.05 });
       if (s % 2 === 1) noiseS(0.03, { filter: "highpass", freq: 6500, vol: 0.02 });
     }
   }

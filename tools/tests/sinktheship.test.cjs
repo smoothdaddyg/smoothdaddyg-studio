@@ -38,7 +38,7 @@ const sandbox = {
   },
   performance: { now: () => 1000 },
   requestAnimationFrame: noop,
-  makeAudio: () => ({ tone: noop, noise: noop, arp: noop, unlock: noop, state: () => "running" }),
+  makeAudio: () => ({ tone: noop, noise: noop, arp: noop, unlock: noop, state: () => "running", makeMusic: () => ({ tick: noop, start: noop, stop: noop, on: false, step: 0 }) }),
   drawPixelNumber: noop,
   Math, JSON, Object, Array,
 };
@@ -100,7 +100,7 @@ function waitForRespawn(cap) {
 function finite(n) { return typeof n === "number" && isFinite(n); }
 
 // ---- config sanity ----
-eq("goals are 5/6/7", F.cfg.GOALS.join(","), "5,6,7");
+eq("goals are 4/5/6 (2026-10-30 quick levels)", F.cfg.GOALS.join(","), "4,5,6");
 eq("proximity fuse is generous (46)", F.cfg.FUSE_R, 46);
 eq("torpedoes auto-fire every 0.9s", F.cfg.TORP_INTERVAL, 0.9);
 eq("octopus rapid-fire lasts 8s", F.cfg.RAPID_T, 8);

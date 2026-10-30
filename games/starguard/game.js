@@ -13,6 +13,24 @@
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX and the invader march.
+     Starts at load; the synth stays silent until the first tap, then
+     plays mid-loop. */
+  const MUSIC = audio.makeMusic({
+    bpm: 140, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.04, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [73.42, 0, 0, 73.42, 0, 0, 110, 0, 73.42, 0, 0, 73.42, 146.83, 0, 110, 0,
+           73.42, 0, 0, 73.42, 0, 0, 110, 0, 73.42, 0, 0, 73.42, 146.83, 0, 110, 0,
+           116.54, 0, 0, 116.54, 0, 0, 174.61, 0, 116.54, 0, 0, 116.54, 233.08, 0, 174.61, 0,
+           110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0],
+    lead: [587.33, 0, 0, 0, 698.46, 0, 0, 0, 587.33, 0, 0, 0, 523.25, 0, 0, 0,
+           587.33, 0, 0, 0, 698.46, 0, 0, 0, 880, 0, 0, 0, 698.46, 0, 0, 0,
+           698.46, 0, 0, 0, 880, 0, 0, 0, 698.46, 0, 0, 0, 587.33, 0, 0, 0,
+           587.33, 698.46, 880, 1046.5, 880, 698.46, 587.33, 698.46, 880, 1046.5, 1174.66, 1046.5, 880, 698.46, 587.33, 0],
+  });
+  MUSIC.start();
 
   let W = 0, H = 0, DPR = 1, time = 0;
 
@@ -604,6 +622,7 @@
     let dt = (now - last) / 1000;
     last = now;
     if (dt > 0.05) dt = 0.05;
+    if (MUSIC) MUSIC.tick(dt);
     time += dt;
     update(dt);
     draw();

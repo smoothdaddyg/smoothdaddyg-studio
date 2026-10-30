@@ -1,5 +1,5 @@
 /* Node test for Passing Frenzy (window.__frenzyTest).
-   Verifies: game starts, tap-to-throw works, ball modes, scoring, win at 10,
+   Verifies: game starts, tap-to-throw works, ball modes, scoring, win at 7,
    restart, red sprinters, proximity steals (in/out of STEAL_RADIUS),
    steal scoring + bottom reset, shot-clock violation (no red points, bottom
    reset), beep warnings in the final 0.5s, pass resetting the clock,
@@ -109,12 +109,12 @@ eq("level 3: 10 blue / 8 red, 100-240", F.levels[2].blue + "/" + F.levels[2].red
 F.start();
 eq("starts at level 1", F.level, 1);
 parkReds();
-F.forceScore("blue", 6); // 6 + 2 = 8
-eq("blue at 8", F.blueScore, 8);
+F.forceScore("blue", 4); // 4 + 2 = 6 < 7, no winner yet
+eq("blue at 6", F.blueScore, 6);
 F.step(2.0); // celebrate finishes -> back to play (no winner yet)
 eq("back to play after celebrate", F.state, "play");
-F.forceScore("blue", 8); // 8 + 2 = 10 -> level 1 won
-eq("blue wins level 1 at 10", F.blueScore, 10);
+F.forceScore("blue", 5); // 5 + 2 = 7 -> level 1 won
+eq("blue wins level 1 at 7", F.blueScore, 7);
 F.step(2.0); // celebrate finishes -> levelup splash
 eq("levelup splash after level 1 win", F.state, "levelup");
 eq("level is now 2", F.level, 2);
@@ -127,7 +127,7 @@ ok("level 2 speeds in 70-190", allPlayers().every((p) => p.speed >= 70 && p.spee
 
 // winning level 2 advances to level 3
 parkReds();
-F.forceScore("blue", 8); // 8 + 2 = 10 -> level 2 won
+F.forceScore("blue", 5); // 5 + 2 = 7 -> level 2 won
 F.step(2.0);
 eq("levelup splash after level 2 win", F.state, "levelup");
 eq("level is now 3", F.level, 3);
@@ -140,8 +140,8 @@ ok("level 3 speeds in 100-240", allPlayers().every((p) => p.speed >= 100 && p.sp
 
 // winning level 3 IS the win (grand finale)
 parkReds();
-F.forceScore("blue", 8); // 8 + 2 = 10 -> finale win
-eq("blue wins level 3 at 10", F.blueScore, 10);
+F.forceScore("blue", 5); // 5 + 2 = 7 -> finale win
+eq("blue wins level 3 at 7", F.blueScore, 7);
 // celebrate comes before win
 ok("celebrate or win after finale", F.state === "celebrate" || F.state === "win");
 F.step(2.0);
@@ -156,8 +156,8 @@ eq("scores reset", F.blueScore + F.redScore, 0);
 // red can win too
 F.start();
 parkReds();
-F.forceScore("red", 8); // 8 + 2 = 10
-eq("red wins at 10", F.redScore, 10);
+F.forceScore("red", 5); // 5 + 2 = 7
+eq("red wins at 7", F.redScore, 7);
 F.step(2.0);
 eq("state is win (red)", F.state, "win");
 
@@ -169,7 +169,7 @@ eq("try again replays the same level", F.level, 1);
 eq("scores reset on try again", F.blueScore + F.redScore, 0);
 
 // config sanity
-ok("win score is 10", F.cfg.WIN_SCORE === 10);
+ok("win score is 7 (2026-10-30 quick levels)", F.cfg.WIN_SCORE === 7);
 eq("steal radius is 48", F.cfg.STEAL_RADIUS, 48);
 eq("shot clock is 4.0s", F.cfg.SHOT_CLOCK, 4.0);
 eq("shot warn window is 0.5s", F.cfg.SHOT_WARN, 0.5);
@@ -426,12 +426,15 @@ const s0 = F.musicStep;
 for (let i = 0; i < 120; i++) F.step(0.016); // ~2s of play
 ok("music step clock advances under play", F.musicStep > s0);
 const s1 = F.musicStep;
-for (let i = 0; i < 600; i++) F.step(0.016); // ~9.6s = one full 32-step loop at 100 BPM
+for (let i = 0; i < 600; i++) F.step(0.016); // ~9.6s covers a full 64-step loop at 142 BPM (6.8s)
 ok("music keeps looping without stalling", F.musicStep > s1);
 const mc = F.musicCfg;
-eq("bass pattern is 32 steps", mc.bass.length, 32);
-eq("lead pattern is 32 steps", mc.lead.length, 32);
-ok("bass stays under the SFX", mc.bassVol <= 0.15);
+eq("bass pattern is 64 steps (4 bars of 16ths)", mc.bass.length, 64);
+eq("lead pattern is 64 steps (4 bars of 16ths)", mc.lead.length, 64);
+// his 2026-10-30 direction: more bass than the old 0.13 ceiling —
+// the triangle bed now sits at 0.2; his ears are the QA on whether
+// it crowds the SFX, and it gets pulled back if it does.
+ok("bass at the new louder level", mc.bassVol <= 0.2);
 ok("lead stays under the SFX", mc.leadVol <= 0.05);
 ok("kick stays under the SFX", mc.kickVol <= 0.2);
 

@@ -269,7 +269,8 @@ eq("music turns on with the game", T.musicOn, true);
   ok("music produces notes", audioCalls.length > a0 + 12);
   const calls = audioCalls.slice(a0);
   ok("chiptune: square-wave lead", calls.some((c) => c[0] === "tone" && c[3] && c[3].type === "square" && c[3].vol === 0.055));
-  ok("chiptune: triangle bass", calls.some((c) => c[0] === "tone" && c[3] && c[3].type === "triangle" && c[3].vol === 0.13));
+  ok("chiptune: triangle bass, louder (2026-10-30 funk pass)", calls.some((c) => c[0] === "tone" && c[3] && c[3].type === "triangle" && c[3].vol === 0.2));
+  ok("funk groove: snare on 2 and 4", calls.some((c) => c[0] === "noise" && c[2] && c[2].filter === "bandpass") && true);
 }
 
 // ---- ramp: hit it and FLY — no crashes while airborne ----

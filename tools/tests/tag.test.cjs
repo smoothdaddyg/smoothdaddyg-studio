@@ -44,6 +44,7 @@ const sandbox = {
     arp: (...a) => audioCalls.push(["arp", ...a]),
     unlock: noop,
     state: () => "running",
+    makeMusic: () => ({ tick: noop, start: noop, stop: noop, on: false, step: 0 }),
   }),
   drawPixelNumber: noop,
   Math, JSON, Object, Array,

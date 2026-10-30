@@ -5,7 +5,7 @@
    some run down. Nobody stops moving — ever.
    ONE interaction: tap anywhere to throw the ball there.
    Lead your teammates, dodge interceptions, tap the top basket
-   to shoot. First to 10 wins.
+   to shoot. First to 7 wins a level (2026-10-30 quick levels).
    Red defenders are fast and steal by getting CLOSE — keep the ball
    moving. Hold it more than 4 seconds and the shot clock takes it
    (watch the ring shrink, listen for the beeps). No fouls, no
@@ -37,7 +37,7 @@
     SHOT_WARN: 0.5,       // final seconds of the clock: beeps + urgent ring
     DRIFT: 26,            // max horizontal drift px/s
     BALL_MUL: 2.5,        // ball speed = BALL_MUL x average player speed
-    WIN_SCORE: 10,
+    WIN_SCORE: 7, // 2026-10-30 quick levels (was 10 — his spec; faster levels = stick longer)
     PTS: 2,               // points per basket / per interception
     SHOOT_ZONE: 85,       // tap within this of a basket = a shot attempt
     SCORE_R: 30,          // ball within this of basket center = bucket
@@ -49,7 +49,7 @@
   /* Three levels — his spec (2026-10-26): "Hard and harder. Faster and
      faster. More people at each level." Level 1 is the current game;
      each level adds players to BOTH teams and raises the speed range.
-     First to 10 wins a level; blue winning level 3 is the grand finale;
+     First to 7 wins a level (2026-10-30: was 10); blue winning level 3 is the grand finale;
      red winning a level just replays that level (no game over, ever). */
   const LEVELS = [
     { blue: CFG.BLUE_COUNT, red: CFG.RED_COUNT, min: CFG.SPEED_MIN, max: CFG.SPEED_MAX },
@@ -63,23 +63,27 @@
   const audio = makeAudio();
 
   /* ---------------- background music ----------------
-     Music pass #1 of his rule (2026-10-22): "video games need
-     background music." A bouncy streetball loop — boom-bap bass,
-     sparse pentatonic stabs, kick/snare/hats — kept quiet under
-     the SFX. Shared sequencer: audio.makeMusic(). */
+     2026-10-30 rollout: the old 100 BPM boom-bap loop is replaced by
+     an original chiptune funk loop — louder syncopated bass, snare on
+     2 and 4, square hook — kept under the SFX. Shared sequencer:
+     audio.makeMusic(). (Crazy Traffic's loop set the recipe; his
+     verdict on it was "good," with more bass and more funk.) */
   const MUSIC_CFG = {
-    bpm: 100,
-    bassType: "triangle", bassVol: 0.13,
-    leadType: "square", leadVol: 0.03,
-    kickVol: 0.16, snareVol: 0.04, hatVol: 0.02,
-    bass: [110, 0, 0, 110, 0, 0, 130.81, 0,
-           98, 0, 0, 98, 0, 146.83, 0, 0,
-           110, 0, 0, 110, 0, 164.81, 0, 130.81,
-           146.83, 0, 130.81, 0, 98, 0, 98, 0],
-    lead: [0, 0, 440, 0, 0, 0, 523.25, 0,
-           0, 587.33, 0, 0, 659.25, 0, 0, 0,
-           0, 0, 440, 0, 523.25, 0, 0, 0,
-           587.33, 0, 659.25, 0, 523.25, 0, 440, 0],
+    bpm: 142, div: 4, steps: 64,
+    bassType: "triangle", bassVol: 0.2,
+    leadType: "square", leadVol: 0.05,
+    kickVol: 0.16, snareVol: 0.05, hatVol: 0.02,
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    hats: "odd",
+    bass: [82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 82.41, 0, 0, 82.41, 164.81, 0, 123.47, 0,
+           98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
+           110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0,
+           98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0],
+    lead: [659.25, 0, 783.99, 0, 659.25, 0, 587.33, 0, 659.25, 0, 783.99, 0, 880, 0, 783.99, 0,
+           392, 0, 587.33, 0, 783.99, 0, 587.33, 0, 392, 0, 493.88, 0, 587.33, 0, 783.99, 0,
+           440, 0, 523.25, 0, 659.25, 0, 523.25, 0, 440, 0, 392, 0, 440, 0, 523.25, 0,
+           659.25, 783.99, 880, 1046.5, 880, 783.99, 659.25, 783.99, 880, 1046.5, 1174.66, 1046.5, 880, 783.99, 659.25, 0],
   };
   const music = audio.makeMusic(MUSIC_CFG);
 
@@ -383,7 +387,9 @@
     state = "celebrate";
     celebrateT = CFG.CELEBRATE_T;
     const b = team === "blue" ? basketTop : basketBottom;
-    confettiBlast(b.x, b.y, 110);
+    // Championship level: double confetti + a center-court explosion.
+    confettiBlast(b.x, b.y, level === 3 ? 220 : 110);
+    if (level === 3) confettiBlast(W / 2, H / 2, 90);
     audio.arp([523, 659, 784, 1047, 1319], 0.09, "square", 0.12);
     audio.noise(0.5, { vol: 0.06 });
     ball.mode = "none";
@@ -645,10 +651,15 @@
     }
     const x = ball.x, y = ball.y, r = 12;
     const bob = 0;
+    // Level 3 is the championship: the ball turns GOLD (2026-10-30
+    // escalation — every level gets crazier, something to tell a
+    // friend about).
+    const champ = level === 3;
     ctx.save();
-    ctx.shadowColor = "#ff9500"; ctx.shadowBlur = 16;
+    ctx.shadowColor = champ ? "#ffd700" : "#ff9500"; ctx.shadowBlur = champ ? 28 : 16;
     const g = ctx.createRadialGradient(x - 4, y - 4 + bob, 2, x, y + bob, r);
-    g.addColorStop(0, "#ffc46b"); g.addColorStop(1, "#e07b00");
+    if (champ) { g.addColorStop(0, "#fff7ad"); g.addColorStop(1, "#ffbf00"); }
+    else { g.addColorStop(0, "#ffc46b"); g.addColorStop(1, "#e07b00"); }
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(x, y + bob, r, 0, 6.2832); ctx.fill();
     ctx.restore();

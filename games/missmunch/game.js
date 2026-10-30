@@ -27,6 +27,23 @@
   window.addEventListener("resize", resize);
 
   var audio = makeAudio();
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX. Starts at load; the
+     synth stays silent until the first tap, then plays mid-loop. */
+  var MUSIC = audio.makeMusic({
+    bpm: 148, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.045, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0,
+           110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0,
+           87.31, 0, 0, 87.31, 0, 0, 130.81, 0, 87.31, 0, 0, 87.31, 174.61, 0, 130.81, 0,
+           82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 82.41, 0, 0, 82.41, 164.81, 0, 123.47, 0],
+    lead: [440, 0, 523.25, 0, 440, 0, 659.25, 0, 440, 0, 523.25, 0, 440, 0, 523.25, 0,
+           440, 0, 523.25, 0, 659.25, 0, 783.99, 0, 659.25, 0, 523.25, 0, 440, 0, 523.25, 0,
+           349.23, 0, 440, 0, 523.25, 0, 440, 0, 349.23, 0, 440, 0, 523.25, 0, 440, 0,
+           440, 523.25, 659.25, 783.99, 880, 783.99, 659.25, 523.25, 659.25, 783.99, 880, 1046.5, 880, 783.99, 659.25, 0],
+  });
+  MUSIC.start();
 
   /* ---------------- mazes ---------------- */
   var COLS = 13, ROWS = 13;
@@ -926,6 +943,7 @@
   function frame(now) {
     var dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    if (MUSIC) MUSIC.tick(dt);
     update(dt);
     draw();
     requestAnimationFrame(frame);

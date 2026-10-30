@@ -52,9 +52,33 @@ How we work on this site. Both human developers and their agents follow this.
   free, no attribution owed to anyone. Never ship a downloaded or
   licensed track, and never use an AI generator's "royalty-free"
   output (plan-rights caveats fail the clean bar).
+  2026-10-30 refinement (his verdict on Crazy Traffic: "good," with
+  more bass and more funk): the bass is a LOUD syncopated triangle
+  line (vol 0.2, 16th-note off-beat root/octave/fifth pops) and the
+  drums are a funk groove (kick on 1 and 3 + a ghost kick into the
+  next bar, snare on 2 and 4). Shared makeMusic supports div (steps
+  per beat, 4 = 16ths) and explicit kicks[]/snares[] arrays.
 - Pace: levels run short and surprises come often — short attention
   spans, keep it moving, keep something unexpected happening
   (Crazy Traffic, 2026-10-29: every level max ~30s at cruise).
+  His 2026-10-30 verdict: faster levels make players stick with the
+  game longer. Applied 2026-10-30: Blitz 5–9 bases (was 6–10), Sink
+  the Ship 4/5/6 goals (was 5/6/7), Time Wings quotas 8/10/12/14
+  (was 10/12/14/16) and smaller bosses, Passing Frenzy first to 7
+  (was 10 — his spec, changed under the fast-levels direction),
+  Frisbee Dog snappier rounds (resolve 0.7s, jog 330 px/s).
+  Miss Munch deliberately untouched: its calm pace is tuned for his
+  daughter. Tag, Star Guard, and the toys have no levels to quicken.
+- Escalation: every level gets CRAZIER, not just harder — each level
+  adds something new to see or tell a friend about (his 2026-10-30
+  bar: the player should go "that's insane / that's crazy"). Already
+  true for most level games — Crazy Traffic: a new car + new
+  surprises each level; Sink the Ship: mines L2, subs + planes L3;
+  Time Wings: a new era each level; Blitz: new weather each level;
+  Miss Munch: a new maze + faster monsters each level. The flat one
+  was Passing Frenzy (levels differed only in counts/speed), so L3
+  is now the championship: gold ball + double confetti + a
+  center-court explosion on every goal.
 - Controls must never hide the action under the player's thumb: put the
   control in its own zone (e.g. a deck at the bottom) with the play
   field above it (Time Wings rule 2026-10-19, Crazy Traffic 2026-10-22).

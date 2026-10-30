@@ -13,6 +13,23 @@
   var canvas = document.getElementById("stage");
   var ctx = canvas.getContext("2d");
   var audio = makeAudio();
+  /* Background music (2026-10-30 rollout): an original chiptune loop —
+     funk bass + square hook, kept under the SFX. Starts at load; the
+     synth stays silent until the first tap, then plays mid-loop. */
+  var MUSIC = audio.makeMusic({
+    bpm: 138, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.05, hats: "odd",
+    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bass: [98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
+           73.42, 0, 0, 73.42, 0, 0, 110, 0, 73.42, 0, 0, 73.42, 146.83, 0, 110, 0,
+           82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 82.41, 0, 0, 82.41, 164.81, 0, 123.47, 0,
+           65.41, 0, 0, 65.41, 0, 0, 98, 0, 65.41, 0, 0, 65.41, 130.81, 0, 98, 0],
+    lead: [392, 0, 587.33, 0, 783.99, 0, 587.33, 0, 392, 0, 493.88, 0, 587.33, 0, 783.99, 0,
+           587.33, 0, 659.25, 0, 783.99, 0, 659.25, 0, 587.33, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+           659.25, 0, 783.99, 0, 659.25, 0, 587.33, 0, 659.25, 0, 783.99, 0, 880, 0, 783.99, 0,
+           392, 493.88, 587.33, 659.25, 783.99, 880, 1046.5, 880, 783.99, 659.25, 587.33, 659.25, 783.99, 880, 1046.5, 0],
+  });
+  MUSIC.start();
 
   var W = 0, H = 0, DPR = 1;
 
@@ -25,10 +42,10 @@
   var DOWN_TIME = 1.5;       // death pause before respawn
   var SPR = 2;               // global sprite scale — chunky and playful
   var ERAS = [
-    { year: 1910, quota: 10, esp: 125, fire: 0,   wob: 0.6, body: "#8d6e63", dark: "#5d4037", bossHp: 6 },
-    { year: 1940, quota: 12, esp: 175, fire: 3.2, wob: 1.0, body: "#546e7a", dark: "#37474f", bossHp: 8 },
-    { year: 1970, quota: 14, esp: 235, fire: 2.3, wob: 1.8, body: "#90a4ae", dark: "#546e7a", bossHp: 10 },
-    { year: 1983, quota: 16, esp: 205, fire: 1.8, wob: 2.6, body: "#7e57c2", dark: "#4527a0", bossHp: 12 }
+    { year: 1910, quota: 8, esp: 125, fire: 0,   wob: 0.6, body: "#8d6e63", dark: "#5d4037", bossHp: 5 },
+    { year: 1940, quota: 10, esp: 175, fire: 3.2, wob: 1.0, body: "#546e7a", dark: "#37474f", bossHp: 6 },
+    { year: 1970, quota: 12, esp: 235, fire: 2.3, wob: 1.8, body: "#90a4ae", dark: "#546e7a", bossHp: 8 },
+    { year: 1983, quota: 14, esp: 205, fire: 1.8, wob: 2.6, body: "#7e57c2", dark: "#4527a0", bossHp: 10 }
   ];
 
   /* ---------------- state ---------------- */
@@ -796,6 +813,7 @@
   function frame(t) {
     var dt = Math.min(0.05, (t - last) / 1000 || 0.016);
     last = t;
+    if (MUSIC) MUSIC.tick(dt);
     update(dt);
     draw();
     requestAnimationFrame(frame);

@@ -29,7 +29,7 @@ const sandbox = {
   },
   performance: { now: () => 1000 },
   requestAnimationFrame: noop,
-  makeAudio: () => ({ tone: noop, noise: noop, arp: noop, toggleMute: () => false, unlock: noop, state: () => "running" }),
+  makeAudio: () => ({ tone: noop, noise: noop, arp: noop, toggleMute: () => false, unlock: noop, state: () => "running", makeMusic: () => ({ tick: noop, start: noop, stop: noop, on: false, step: 0 }) }),
   drawPixelNumber: noop,
   Math, JSON, Object, Array, setTimeout: (fn) => 0,
 };
