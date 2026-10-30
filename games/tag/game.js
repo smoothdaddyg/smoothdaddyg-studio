@@ -1,12 +1,18 @@
 /* ============================================================
    TAG! YOU'RE IT — SmoothDaddyG (game #18)
-   Real playground tag, kept simple. The big bouncing star badge
+   Real playground tag, sharpened. The big bouncing star badge
    marks IT — and IT passes to whoever gets tagged.
-   You start as IT. Everybody runs from you. Catch someone on
-   the slide and THEY'RE it — now run, because they chase whoever
-   is closest, and that might be you. Tag anybody, anybody can
-   tag you. When the timer runs out, whoever is IT is the loser.
-   ONE interaction: drag anywhere. That's all there is to it.
+   You start as IT. Everybody runs from you — and everybody runs
+   FAST now. Tag anybody, but NO TAG-BACKS: once you tag someone,
+   they can't tag you back until they've tagged someone else.
+   When you're IT, grab a dodgeball and TAP to throw it at the
+   nearest friend, or grab the star for a STAR FRENZY that tags
+   the three nearest friends at once. Pop-up benches and tires
+   appear and block the field, so escape routes keep changing.
+   5 quick levels, each one faster. Survive the clock without
+   wearing the badge and the level is yours; clear all 5 and
+   you're the champion.
+   ONE interaction: drag to run. TAP to throw while holding a ball.
    ============================================================ */
 
 (function () {
@@ -15,47 +21,69 @@
   /* ---------------- tuning (all gameplay numbers live here) ---------------- */
   const CFG = {
     KID_COUNT: 5,       // friends to tag
-    ROUND_T: 60,        // seconds on the clock — whoever is IT at 0 loses
-    PLAYER_SPEED: 260,  // your kid runs toward your finger, px/s
-    KID_SPEED_MIN: 60,  // friends dawdle — always slower than you
-    KID_SPEED_MAX: 90,
+    LEVELS: 5,          // quick levels — clear all 5 and you're champion
+    LEVEL_TIMES: [40, 35, 35, 30, 30], // seconds on the clock per level
+    PLAYER_SPEED: 320,  // L1 — your kid runs toward your finger, px/s
+                        // (+15 per level, so you stay the fastest)
+    KID_SPEED_MIN: 90,  // friends jog now, not dawdle — always slower
+    KID_SPEED_MAX: 140, // than you, but the gap shrinks every level
     KID_TURN_MIN: 2,    // friends change direction every 2-4 s
     KID_TURN_MAX: 4,
-    IT_KID_SPEED: 170,  // the "it" kid chases hard — faster than fleeing
-                        // friends (120) but slower than you (260), so you
-                        // can dodge or chase as you like
-    KID_FLEE_SPEED: 120, // friends run from IT — quick, but you catch them
+    IT_KID_SPEED: 240,  // L1 — the "it" kid chases hard, faster than
+                        // fleeing friends (180) but slower than you
+                        // (320), so you can dodge or chase as you like
+    KID_FLEE_SPEED: 180, // friends run from IT — quick, but you catch them
+    LEVEL_SPEED: 0.12,  // kid speeds grow 12% per level (L5: it-kid 355,
+                        // still under your 380 — dodgeable, barely)
     FLEE_R: 150,        // friends start running when IT gets this close
     TAG_COOLDOWN: 0.8,  // s after a tag before anyone can be tagged again —
                         // the "it counts" beat; the new IT also STANDS
                         // STILL for a full second (TAG_HOLD) so the tagger
                         // gets a real head start — no ping-pong tagging
     TAG_HOLD: 1.0,      // the new IT must wait this long before chasing
-                        // then the new IT can tag anybody
     TAG_R: 70,          // generous tag radius — be kind
     KID_R: 34,          // kid body size (px) — BIG, Fisher-Price chunky
     EDGE_M: 70,         // everyone stays this far inside the field
     OBSTACLES: 3,       // solid playground equipment to chase around
+    POPUP_WARN: 0.9,    // telegraph before a pop-up goes solid
+    POPUP_SOLID: 5,     // seconds a pop-up blocks the field
+    POPUP_FIRST: 8,     // first pop-up appears this far into a level
+    BALL_R: 50,         // pickup radius for a dodgeball
+    THROW_R: 320,       // tap-throw only reaches this far (aim line shows it)
+    THROW_SPEED: 520,   // a thrown ball flies straight, no homing
+    STAR_R: 46,         // pickup radius for the star
+    STAR_FIRST: 12,     // first star appears this far into a level
+    STAR_EVERY: 22,     // a new star this often after one is used/lost
+    STAR_LIFE: 9,       // star vanishes after this long unclaimed
   };
 
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
   /* Background music (2026-10-30 rollout): an original chiptune loop —
-     funk bass + square hook, kept under the SFX. Starts at load; the
+     distinct chiptune voice, kept under the SFX. Starts at load; the
      synth stays silent until the first tap, then plays mid-loop. */
   const MUSIC = audio.makeMusic({
-    bpm: 146, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.05, hats: "odd",
-    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
+    bpm: 146, div: 4, steps: 64,
+    bassType: "triangle", bassVol: 0.2,
+    leadType: "square", leadVol: 0.05,
+    harmonyType: "square", harmonyVol: 0.025,
+    kickVol: 0.16, snareVol: 0.05, hatVol: 0.02,
+    kicks: [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60],
     snares: [4, 12, 20, 28, 36, 44, 52, 60],
-    bass: [65.41, 0, 0, 65.41, 0, 0, 98, 0, 65.41, 0, 0, 65.41, 130.81, 0, 98, 0,
-           87.31, 0, 0, 87.31, 0, 0, 130.81, 0, 87.31, 0, 0, 87.31, 174.61, 0, 130.81, 0,
-           98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
-           87.31, 0, 0, 87.31, 0, 0, 130.81, 0, 87.31, 0, 0, 87.31, 174.61, 0, 130.81, 0],
-    lead: [523.25, 0, 659.25, 0, 523.25, 0, 392, 0, 523.25, 0, 659.25, 0, 783.99, 0, 659.25, 0,
-           698.46, 0, 880, 0, 698.46, 0, 523.25, 0, 698.46, 0, 880, 0, 1046.5, 0, 880, 0,
-           392, 0, 587.33, 0, 783.99, 0, 587.33, 0, 392, 0, 493.88, 0, 587.33, 0, 783.99, 0,
-           523.25, 659.25, 783.99, 880, 1046.5, 880, 783.99, 659.25, 783.99, 880, 1046.5, 1174.66, 1046.5, 880, 783.99, 0],
+    hats: "odd",
+    bass: [65.41, 0, 0, 130.81, 0, 0, 65.41, 0, 0, 130.81, 0, 0, 65.41, 0, 98, 0,
+           87.31, 0, 0, 174.61, 0, 0, 87.31, 0, 0, 174.61, 0, 0, 87.31, 0, 130.81, 0,
+           98, 0, 0, 196, 0, 0, 98, 0, 0, 196, 0, 0, 98, 0, 146.83, 0,
+           87.31, 0, 0, 174.61, 0, 0, 87.31, 0, 0, 174.61, 0, 0, 87.31, 0, 130.81, 0],
+    lead: [523.25, 523.25, 0, 523.25, 0, 659.25, 0, 523.25, 523.25, 0, 523.25, 0, 392, 0, 0, 0,
+           698.46, 698.46, 0, 698.46, 0, 880, 0, 698.46, 698.46, 0, 698.46, 0, 523.25, 0, 0, 0,
+           783.99, 783.99, 0, 783.99, 0, 659.25, 0, 783.99, 783.99, 0, 783.99, 0, 587.33, 0, 0, 0,
+           698.46, 880, 1046.5, 880, 698.46, 880, 1046.5, 1174.66, 1046.5, 880, 698.46, 0, 0, 0, 0, 0],
+    harmony: [329.63, 0, 0, 0, 0, 0, 0, 0, 392, 0, 0, 0, 0, 0, 0, 0,
+           440, 0, 0, 0, 0, 0, 0, 0, 523.25, 0, 0, 0, 0, 0, 0, 0,
+           493.88, 0, 0, 0, 0, 0, 0, 0, 587.33, 0, 0, 0, 0, 0, 0, 0,
+           440, 0, 0, 0, 0, 0, 0, 0, 523.25, 0, 0, 0, 0, 0, 0, 0]
   });
   MUSIC.start();
 
@@ -81,8 +109,38 @@
   let lastTag = null;
   // how long the NEW "it" must stand still before chasing (the hold)
   let itHold = 0;
-  // the clock: seconds left in the round. At 0, whoever is IT loses.
-  let roundT = CFG.ROUND_T;
+  // NO TAG-BACKS: {it, not} — the current IT may not tag `not` until
+  // they have tagged someone else (a new tag replaces the pair).
+  let noBack = null;
+  let noBackMsgT = -10; // throttle for the "NO TAG-BACKS!" floater
+  // levels: 1-5. The clock: seconds left in the level. At 0, whoever
+  // is IT loses the level (retry it) — survive it and the level is yours.
+  let level = 1;
+  let levelTotal = CFG.LEVEL_TIMES[0];
+  let roundT = CFG.LEVEL_TIMES[0];
+  // this level's speeds (set by startLevel — player stays fastest)
+  let S = levelSpeeds(1);
+  // level-clear splash: {txt, t} + the level it leads to, or 0
+  let splash = null;
+  let pendingLevel = 0;
+  // end screen kind: "retry" (you're it at the buzzer) or "finale"
+  let endKind = "retry";
+  // pop-up obstacles: {x, y, w, h, kind, state: "warn"|"solid", t}
+  let popups = [];
+  let popupT = CFG.POPUP_FIRST;
+  // dodgeballs: field balls {x, y}, flying balls {x, y, px, py, vx, vy,
+  // travel, from, star} — star bullets fly like balls but tag gold
+  let balls = [];
+  let ballT = 0;
+  let carried = false; // you (IT) are holding a ball — TAP to throw it
+  let thrown = [];
+  // the star pickup: {x, y, age} — IT grabs it for a STAR FRENZY
+  let star = null;
+  let starT = CFG.STAR_FIRST;
+  // floating announcements {x, y, txt, t, life}
+  let floaters = [];
+  // quick-tap tracking for tap-to-throw (vs a drag)
+  let downMs = 0, downX = 0, downY = 0;
 
   // solid playground obstacles: {x, y, w, h, kind} — everyone runs AROUND
   // them (circle-vs-rect push-out, so chases slide around corners).
@@ -272,6 +330,23 @@
     audio.tone(392, 0.15, { type: "sine", vol: 0.10, slideTo: 330 });
     audio.tone(330, 0.2, { type: "sine", vol: 0.10, slideTo: 262, when: 0.16 });
   }
+  function sndThrow() {
+    // dodgeball whoosh — quick slide down
+    audio.tone(880, 0.12, { type: "sine", vol: 0.09, slideTo: 440 });
+  }
+  function sndStar() {
+    // STAR FRENZY — sparkling rise
+    audio.arp([784, 988, 1175, 1568], 0.06, "square", 0.10);
+  }
+  function sndLevel() {
+    // level cleared — short happy climb
+    audio.arp([523, 659, 784, 1047], 0.09, "square", 0.11);
+  }
+  function sndNoBack() {
+    // gentle "nope" bonk for a blocked tag-back — soft, not scolding
+    audio.tone(220, 0.1, { type: "square", vol: 0.07 });
+    audio.tone(196, 0.12, { type: "square", vol: 0.07, when: 0.11 });
+  }
 
   /* ---------------- setup ---------------- */
   function resetPlayer() {
@@ -293,7 +368,7 @@
       kids.push({
         x: x, y: y,
         angle: rnd(0, 6.283),
-        speed: rnd(CFG.KID_SPEED_MIN, CFG.KID_SPEED_MAX),
+        speed: rnd(S.kidMin, S.kidMax),
         turnT: rnd(CFG.KID_TURN_MIN, CFG.KID_TURN_MAX),
         phase: rnd(0, 6.283),
         color: KID_COLORS[i % KID_COLORS.length],
@@ -302,34 +377,93 @@
     }
   }
 
-  function startGame() {
-    parts = []; rings = []; confetti = [];
+  // this level's speeds — kid speeds scale, you stay the fastest
+  function levelSpeeds(n) {
+    const m = 1 + CFG.LEVEL_SPEED * (n - 1);
+    return {
+      player: CFG.PLAYER_SPEED + 15 * (n - 1),
+      kidMin: CFG.KID_SPEED_MIN * m,
+      kidMax: CFG.KID_SPEED_MAX * m,
+      flee: CFG.KID_FLEE_SPEED * m,
+      itKid: CFG.IT_KID_SPEED * m,
+    };
+  }
+
+  function startLevel(n) {
+    level = n;
+    S = levelSpeeds(n);
+    levelTotal = CFG.LEVEL_TIMES[n - 1];
+    roundT = levelTotal;
+    parts = []; rings = []; confetti = []; floaters = [];
     resetPlayer();
     resetKids();
-    it = "player"; // you start as IT, just like the title says
+    it = "player"; // you start every level as IT, just like the title says
     lastTag = null;
     itHold = 0;
-    roundT = CFG.ROUND_T;
+    noBack = null;
+    popups = []; popupT = CFG.POPUP_FIRST;
+    balls = []; ballT = 0; spawnBall();
+    carried = false; thrown = [];
+    star = null; starT = CFG.STAR_FIRST;
+    splash = null; pendingLevel = 0;
     state = "play";
+  }
+
+  function startGame() {
+    startLevel(1);
     if (window.SDGplays) window.SDGplays.played("tag");
     sndGo();
   }
 
-  function endGame() {
-    // the clock hit 0: whoever is IT loses.
-    state = "end";
-    if (it === "player") sndOops(); // gentle — you're it, play again!
-    else { sndWin(); confettiBlast(W / 2, H * 0.4, 130); }
+  function levelEnd() {
+    // the clock hit 0: whoever is IT loses the LEVEL.
+    if (it === "player") {
+      // you're IT at the buzzer — gentle, retry this level!
+      state = "end";
+      endKind = "retry";
+      sndOops();
+    } else if (level >= CFG.LEVELS) {
+      // all 5 levels cleared — champion!
+      state = "end";
+      endKind = "finale";
+      sndWin();
+      confettiBlast(W / 2, H * 0.4, 130);
+    } else {
+      // level cleared — splash, then the next (faster) level
+      sndLevel();
+      confettiBlast(W / 2, H * 0.4, 60);
+      splash = { txt: "LEVEL " + (level + 1) + "!", t: 1.4 };
+      pendingLevel = level + 1;
+    }
   }
 
   /* ---------------- tagging: IT passes to whoever gets tagged ---------------- */
+  // a floating announcement (no reading skill needed — big and brief)
+  function floater(x, y, txt) {
+    if (floaters.length < 6) floaters.push({ x: x, y: y, txt: txt, t: 0, life: 1.3 });
+  }
+
+  // NO TAG-BACKS: may `tagger` (the current IT) tag `victim`? No, when
+  // victim tagged tagger last and hasn't tagged anyone since.
+  function tagBlocked(tagger, victim) {
+    return !!noBack && noBack.it === tagger && noBack.not === victim;
+  }
+
   // pass the star badge to the new IT, starting the brief "it counts" beat
-  function passIt(newIt) {
+  function passIt(newIt, tagger) {
     lastTag = { newIt: newIt, t: time };
     it = newIt;
     // the new "it" must wait a full second before chasing — the
     // tagger gets a head start, no instant ping-pong tagging
     itHold = CFG.TAG_HOLD;
+    // NO TAG-BACKS: the new IT can't tag their tagger back until
+    // they've tagged someone else (the next tag replaces the pair)
+    noBack = { it: newIt, not: tagger };
+    // if you were carrying a ball and you're no longer IT, drop it
+    if (carried && newIt !== "player") {
+      carried = false;
+      balls.push({ x: player.x, y: player.y });
+    }
   }
 
   function tagBurst(x, y) {
@@ -342,14 +476,14 @@
     const k = kids[i];
     tagBurst(k.x, k.y);
     sndTag();
-    passIt(i);
+    passIt(i, "player");
   }
 
   // the IT kid tags YOU: you're IT — go chase somebody!
   function kidTagsPlayer() {
     tagBurst(player.x, player.y);
     sndYoureIt();
-    passIt("player");
+    passIt("player", it);
   }
 
   // the IT kid tags another friend: IT keeps bouncing around the playground
@@ -357,7 +491,16 @@
     const k = kids[i];
     tagBurst(k.x, k.y);
     sndTag();
-    passIt(i);
+    passIt(i, it);
+  }
+
+  // a thrown ball (or star bullet) tags a friend: same badge pass,
+  // with the thrower as the tagger for no-tag-backs purposes
+  function projectileTagsKid(i, from) {
+    const k = kids[i];
+    tagBurst(k.x, k.y);
+    sndTag();
+    passIt(i, from);
   }
 
   /* ---------------- input: drag anywhere ---------------- */
@@ -370,10 +513,14 @@
     if (audio.unlock) audio.unlock();
     if (state === "title") { startGame(); return; }
     if (state === "end") {
-      if (dist(x, y, againBtn.x, againBtn.y) <= againBtn.r) startGame();
+      if (dist(x, y, againBtn.x, againBtn.y) <= againBtn.r) {
+        if (endKind === "retry") startLevel(level); // same level, again!
+        else startGame(); // finale — back to level 1
+      }
       return;
     }
     if (state !== "play") return;
+    downMs = performance.now(); downX = x; downY = y;
     dragging = true;
     setTarget(x, y);
   }
@@ -383,7 +530,14 @@
     setTarget(x, y);
   }
 
-  function onUp() {
+  function onUp(x, y) {
+    // a quick tap (not a drag) while you're IT and holding a ball
+    // throws it at the nearest friend — dodgeball!
+    if (state === "play" && carried && x !== undefined &&
+        performance.now() - downMs < 300 &&
+        dist(downX, downY, x, y) < 24) {
+      throwBall();
+    }
     dragging = false;
     target = null; // finger up — your kid stops, happy and waiting
   }
@@ -398,7 +552,7 @@
   });
   canvas.addEventListener("pointerup", function (e) {
     e.preventDefault();
-    onUp();
+    onUp(e.clientX, e.clientY);
   });
   canvas.addEventListener("pointercancel", function (e) {
     e.preventDefault();
@@ -409,14 +563,32 @@
   /* ---------------- update ---------------- */
   function tickPlayer(dt) {
     player.phase += dt * 10;
-    if (!target) return;
-    // steer around obstacles so a straight drag never stalls on the slide
-    if (steerAround(player, target.x, target.y, CFG.PLAYER_SPEED, dt)) {
-      target = null; // arrived — happy stop
+    if (target) {
+      // steer around obstacles so a straight drag never stalls on the slide
+      if (steerAround(player, target.x, target.y, S.player, dt)) {
+        target = null; // arrived — happy stop
+      }
+      player.x = clamp(player.x, 20, W - 20);
+      player.y = clamp(player.y, 20, H - 20);
     }
-    player.x = clamp(player.x, 20, W - 20);
-    player.y = clamp(player.y, 20, H - 20);
     collideObstacles(player, CFG.KID_R * 0.8);
+    collidePopups(player, CFG.KID_R * 0.8);
+    // IT-only pickups: a dodgeball to carry, or the star for a frenzy
+    if (it === "player") {
+      if (!carried) {
+        for (let i = balls.length - 1; i >= 0; i--) {
+          if (dist(player.x, player.y, balls[i].x, balls[i].y) < CFG.BALL_R) {
+            balls.splice(i, 1);
+            carried = true;
+            ballT = 6; // a fresh ball joins the field shortly
+            break;
+          }
+        }
+      }
+      if (star && dist(player.x, player.y, star.x, star.y) < CFG.STAR_R) {
+        starBurst();
+      }
+    }
   }
 
   function clampToField(k) {
@@ -445,20 +617,25 @@
         if (itHold > 0) {
           continue;
         }
-        // chase whoever is CLOSEST (you or a friend),
-        // no favorites. Tag anybody.
-        let tx = player.x, ty = player.y;
-        let bd = dist(k.x, k.y, player.x, player.y);
+        // chase whoever is CLOSEST (you or a friend), no favorites —
+        // except the one they can't tag back (no-tag-backs rule)
+        let tx = null, ty = null, bd = 1e9;
+        if (!tagBlocked(i, "player")) {
+          tx = player.x; ty = player.y;
+          bd = dist(k.x, k.y, player.x, player.y);
+        }
         for (let j = 0; j < kids.length; j++) {
-          if (j === i) continue;
+          if (j === i || tagBlocked(i, j)) continue;
           const o = kids[j];
           const d = dist(k.x, k.y, o.x, o.y);
           if (d < bd) { bd = d; tx = o.x; ty = o.y; }
         }
+        if (tx === null) continue; // nowhere legal to chase — wait it out
         // swing around the slide instead of stalling on it head-on
-        steerAround(k, tx, ty, CFG.IT_KID_SPEED, dt);
+        steerAround(k, tx, ty, S.itKid, dt);
         clampToField(k);
         collideObstacles(k, CFG.KID_R * 0.8);
+        collidePopups(k, CFG.KID_R * 0.8);
         continue;
       }
       // not it: run from IT when it gets close, dawdle otherwise
@@ -466,8 +643,8 @@
       if (d < CFG.FLEE_R) {
         const a = Math.atan2(k.y - ip.y, k.x - ip.x);
         k.angle = a;
-        k.x += Math.cos(a) * CFG.KID_FLEE_SPEED * dt;
-        k.y += Math.sin(a) * CFG.KID_FLEE_SPEED * dt;
+        k.x += Math.cos(a) * S.flee * dt;
+        k.y += Math.sin(a) * S.flee * dt;
       } else {
         k.turnT -= dt;
         if (k.turnT <= 0) {
@@ -480,6 +657,7 @@
       }
       clampToField(k);
       collideObstacles(k, CFG.KID_R * 0.8);
+      collidePopups(k, CFG.KID_R * 0.8);
     }
   }
 
@@ -512,24 +690,36 @@
     if (itHold > 0) return;
     if (lastTag && (time - lastTag.t) < CFG.TAG_COOLDOWN) return;
     if (it === "player") {
-      // you're IT — tag a friend and THEY become it
+      // you're IT — tag a friend and THEY become it, unless that's
+      // the one you can't tag back yet (they tagged you last)
       for (let i = 0; i < kids.length; i++) {
         const k = kids[i];
         if (dist(player.x, player.y, k.x, k.y) < CFG.TAG_R) {
+          if (tagBlocked("player", i)) {
+            // blocked — say so (throttled) and keep looking: another
+            // friend nearby may be perfectly taggable
+            if (time - noBackMsgT > 1.2) {
+              noBackMsgT = time;
+              floater(k.x, k.y - 60, "NO TAG-BACKS!");
+              sndNoBack();
+            }
+            continue;
+          }
           playerTagsKid(i);
           return;
         }
       }
     } else {
       const k = kids[it];
-      // the IT kid tags YOU — you're it again!
-      if (dist(k.x, k.y, player.x, player.y) < CFG.TAG_R) {
+      // the IT kid tags YOU — unless you're the one they can't tag back
+      if (!tagBlocked(it, "player") &&
+          dist(k.x, k.y, player.x, player.y) < CFG.TAG_R) {
         kidTagsPlayer();
         return;
       }
       // ...or tags another friend — IT keeps bouncing around
       for (let i = 0; i < kids.length; i++) {
-        if (i === it) continue;
+        if (i === it || tagBlocked(it, i)) continue;
         const o = kids[i];
         if (dist(k.x, k.y, o.x, o.y) < CFG.TAG_R) {
           kidTagsKid(i);
@@ -539,17 +729,210 @@
     }
   }
 
+  /* ---------------- pop-ups, dodgeballs, star ---------------- */
+  // a free spot: inside the field, clear of the timer bar, static
+  // obstacles, solid pop-ups, and everyone playing (fair spawns)
+  function spawnFreeSpot(pad) {
+    let x = W / 2, y = H / 2, tries = 0;
+    do {
+      x = rnd(CFG.EDGE_M, W - CFG.EDGE_M);
+      y = rnd(CFG.EDGE_M + 90, H - CFG.EDGE_M);
+      tries++;
+    } while ((insideObstacle(x, y, pad) || solidPopupAt(x, y, pad) ||
+              dist(x, y, player.x, player.y) < 130 ||
+              kids.some((k) => dist(x, y, k.x, k.y) < 130)) && tries < 100);
+    return { x: x, y: y };
+  }
+
+  function solidPopupAt(x, y, pad) {
+    for (const p of popups) {
+      if (p.state !== "solid") continue;
+      if (x > p.x - pad && x < p.x + p.w + pad &&
+          y > p.y - pad && y < p.y + p.h + pad) return true;
+    }
+    return false;
+  }
+
+  // push a circle out of every SOLID pop-up (warn pop-ups don't block yet)
+  function collidePopups(p, r) {
+    for (const o of popups) {
+      if (o.state !== "solid") continue;
+      const cx = clamp(p.x, o.x, o.x + o.w);
+      const cy = clamp(p.y, o.y, o.y + o.h);
+      const dx = p.x - cx, dy = p.y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d < r) {
+        if (d > 0.001) {
+          p.x = cx + dx / d * r;
+          p.y = cy + dy / d * r;
+        } else {
+          const pl = p.x - o.x, pr = o.x + o.w - p.x;
+          const pt = p.y - o.y, pb = o.y + o.h - p.y;
+          const m = Math.min(pl, pr, pt, pb);
+          if (m === pl) p.x = o.x - r;
+          else if (m === pr) p.x = o.x + o.w + r;
+          else if (m === pt) p.y = o.y - r;
+          else p.y = o.y + o.h + r;
+        }
+      }
+    }
+  }
+
+  function popupMax() {
+    return level >= 4 ? 3 : level >= 2 ? 2 : 1;
+  }
+  function popupEvery() {
+    return Math.max(4.5, 8 - 0.8 * (level - 1));
+  }
+
+  function tickPopups(dt) {
+    popupT -= dt;
+    if (popupT <= 0) {
+      const solid = popups.filter((p) => p.state === "solid").length;
+      if (solid < popupMax()) {
+        const s = spawnFreeSpot(55);
+        const w = rnd(72, 96), h = rnd(56, 80);
+        popups.push({ x: s.x - w / 2, y: s.y - h / 2, w: w, h: h,
+                      kind: Math.random() < 0.5 ? "bench" : "tire",
+                      state: "warn", t: 0 });
+      }
+      popupT = popupEvery();
+    }
+    for (let i = popups.length - 1; i >= 0; i--) {
+      const p = popups[i];
+      p.t += dt;
+      if (p.state === "warn" && p.t >= CFG.POPUP_WARN) {
+        p.state = "solid"; p.t = 0;
+      } else if (p.state === "solid" && p.t >= CFG.POPUP_SOLID) {
+        popups.splice(i, 1);
+      }
+    }
+  }
+
+  function spawnBall() {
+    const s = spawnFreeSpot(60);
+    balls.push({ x: s.x, y: s.y });
+  }
+
+  // TAP while holding a ball: throw it at the nearest friend in range.
+  // Straight line, no homing — dodgeball! A hit tags them (unless
+  // they're the one you can't tag back — then the ball fizzles).
+  function throwBall() {
+    if (!carried) return;
+    let bi = -1, bd = CFG.THROW_R;
+    for (let i = 0; i < kids.length; i++) {
+      const d = dist(player.x, player.y, kids[i].x, kids[i].y);
+      if (d < bd) { bd = d; bi = i; }
+    }
+    if (bi < 0) return; // nobody in range — keep holding it
+    const t = kids[bi];
+    const d = Math.max(1, dist(player.x, player.y, t.x, t.y));
+    carried = false;
+    ballT = 6; // a fresh ball joins the field shortly
+    thrown.push({ x: player.x, y: player.y, px: player.x, py: player.y,
+                  vx: (t.x - player.x) / d * CFG.THROW_SPEED,
+                  vy: (t.y - player.y) / d * CFG.THROW_SPEED,
+                  travel: 0, from: "player", star: false });
+    sndThrow();
+  }
+
+  // STAR FRENZY: three gold bullets at the three nearest friends, all
+  // at once. Each one that connects tags that friend — IT bounces
+  // between them and lands on the last one hit.
+  function starBurst() {
+    if (!star) return;
+    star = null;
+    starT = CFG.STAR_EVERY;
+    const order = kids.map((k, i) => ({ i: i, d: dist(player.x, player.y, k.x, k.y) }))
+      .sort((a, b) => a.d - b.d).slice(0, 3);
+    for (const o of order) {
+      const t = kids[o.i];
+      const d = Math.max(1, o.d);
+      thrown.push({ x: player.x, y: player.y, px: player.x, py: player.y,
+                    vx: (t.x - player.x) / d * 640,
+                    vy: (t.y - player.y) / d * 640,
+                    travel: 0, from: "player", star: true });
+    }
+    floater(player.x, player.y - 70, "STAR FRENZY!");
+    rings.push({ x: player.x, y: player.y - 10, r: 24, t: 0, life: 0.6, hue: 45 });
+    sndStar();
+  }
+
+  function tickProjectiles(dt) {
+    for (let i = thrown.length - 1; i >= 0; i--) {
+      const b = thrown[i];
+      b.px = b.x; b.py = b.y;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      b.travel += Math.hypot(b.vx, b.vy) * dt;
+      let done = false;
+      // a hit tags whoever it touches (unless no-tag-backs blocks it)
+      for (let j = 0; j < kids.length; j++) {
+        if (dist(b.x, b.y, kids[j].x, kids[j].y) < 42) {
+          if (tagBlocked(b.from, j)) {
+            floater(kids[j].x, kids[j].y - 60, "NO TAG-BACKS!");
+            sndNoBack();
+          } else {
+            projectileTagsKid(j, b.from);
+          }
+          done = true;
+          break;
+        }
+      }
+      if (!done && (b.travel > 620 || b.x < 0 || b.x > W || b.y < 0 || b.y > H)) {
+        // missed: a plain ball drops where it stopped (star bullets vanish)
+        if (!b.star) {
+          balls.push({ x: clamp(b.x, 30, W - 30), y: clamp(b.y, 100, H - 30) });
+        }
+        done = true;
+      }
+      if (done) thrown.splice(i, 1);
+    }
+    // a fresh ball joins the field when none is lying around
+    if (balls.length === 0) {
+      ballT -= dt;
+      if (ballT <= 0) { spawnBall(); ballT = 6; }
+    }
+  }
+
+  function tickStar(dt) {
+    if (star) {
+      star.age += dt;
+      if (star.age >= CFG.STAR_LIFE) { star = null; starT = CFG.STAR_EVERY; }
+    } else {
+      starT -= dt;
+      if (starT <= 0) {
+        const s = spawnFreeSpot(60);
+        star = { x: s.x, y: s.y, age: 0 };
+      }
+    }
+  }
+
   function tick(dt) {
     time += dt;
 
     if (state === "play") {
-      roundT -= dt;
-      if (roundT <= 0) { roundT = 0; endGame(); return; }
-      if (itHold > 0) itHold = Math.max(0, itHold - dt);
-      tickPlayer(dt);
-      tickKids(dt);
-      separateKids();
-      tickTags();
+      if (splash) {
+        // level-clear splash: the field holds still for the announcement
+        splash.t -= dt;
+        if (splash.t <= 0) {
+          splash = null;
+          if (pendingLevel) {
+            const n = pendingLevel; pendingLevel = 0;
+            startLevel(n);
+          }
+        }
+      } else {
+        roundT -= dt;
+        if (roundT <= 0) { roundT = 0; levelEnd(); return; }
+        if (itHold > 0) itHold = Math.max(0, itHold - dt);
+        tickPlayer(dt);
+        tickKids(dt);
+        separateKids();
+        tickTags();
+        tickPopups(dt);
+        tickProjectiles(dt);
+        tickStar(dt);
+      }
     } else if (state === "end") {
       // celebration: everyone jumps and cheers, confetti keeps falling
       for (const k of kids) k.phase += dt * 9;
@@ -581,6 +964,11 @@
       const r = rings[i];
       r.t += dt;
       if (r.t >= r.life) rings.splice(i, 1);
+    }
+    for (let i = floaters.length - 1; i >= 0; i--) {
+      const f = floaters[i];
+      f.t += dt; f.y -= 30 * dt;
+      if (f.t >= f.life) floaters.splice(i, 1);
     }
   }
 
@@ -840,7 +1228,7 @@
   // gone, time's up and whoever is IT loses. The last 10 seconds the bar
   // turns red and pulses — uh oh!
   function drawSlots() {
-    const frac = clamp(roundT / CFG.ROUND_T, 0, 1);
+    const frac = clamp(roundT / levelTotal, 0, 1);
     const bw = W - 240, bh = 16;
     const bx = 112, by = 18; // clear of the back button (top-left)
     // bar track
@@ -853,6 +1241,8 @@
     // seconds left, right of the bar
     drawPixelNumber(ctx, Math.ceil(roundT), bx + bw + 34, by + bh / 2, 5,
                     urgent ? "#ff8a5a" : "#ffffff", true);
+    // one big level digit, bottom-right — which level you're on
+    drawPixelNumber(ctx, level, W - 40, H - 54, 8, "rgba(255,255,255,0.45)", false);
   }
 
   /* ---------------- drawing: buttons ---------------- */
@@ -900,9 +1290,9 @@
   }
 
   function drawEnd() {
-    // the clock ran out: whoever is IT loses.
-    const youLose = it === "player";
-    ctx.fillStyle = youLose ? "rgba(40,10,25,0.30)" : "rgba(10,40,25,0.30)";
+    // the clock ran out: retry this level, or the 5-level finale.
+    const retry = endKind === "retry";
+    ctx.fillStyle = retry ? "rgba(40,10,25,0.30)" : "rgba(10,40,25,0.30)";
     ctx.fillRect(0, 0, W, H);
     // star shower badge
     ctx.save();
@@ -914,18 +1304,26 @@
     ctx.textAlign = "center";
     ctx.font = "34px 'Press Start 2P', monospace";
     ctx.strokeStyle = "rgba(60,40,0,0.9)"; ctx.lineWidth = 7;
-    if (youLose) {
-      // you're IT at the buzzer — gentle, play again!
+    if (retry) {
+      // you're IT at the buzzer — gentle, same level again!
       ctx.fillStyle = "#ff8a8a";
       ctx.strokeText("YOU'RE IT!", W / 2, H * 0.42);
       ctx.fillText("YOU'RE IT!", W / 2, H * 0.42);
+      ctx.font = "20px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeText("TRY AGAIN", W / 2, H * 0.42 + 44);
+      ctx.fillText("TRY AGAIN", W / 2, H * 0.42 + 44);
     } else {
       ctx.fillStyle = "#ffffff";
       ctx.strokeText("YOU WIN!", W / 2, H * 0.42);
       ctx.fillText("YOU WIN!", W / 2, H * 0.42);
+      ctx.font = "20px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#ffe45e";
+      ctx.strokeText("5 LEVELS CLEARED!", W / 2, H * 0.42 + 44);
+      ctx.fillText("5 LEVELS CLEARED!", W / 2, H * 0.42 + 44);
     }
     ctx.textAlign = "left";
-    drawTriangleButton(againBtn, youLose ? "#ff8a8a" : "#ffd23f");
+    drawTriangleButton(againBtn, retry ? "#ff8a8a" : "#ffd23f");
   }
 
   function drawParts() {
@@ -955,8 +1353,170 @@
     }
   }
 
+  /* ---------------- drawing: pop-ups, balls, star, floaters ---------------- */
+  function drawPopups() {
+    for (const p of popups) {
+      if (p.state === "warn") {
+        // telegraph: pulsing outline, filling in — get ready, it's coming!
+        const k = 0.5 + Math.sin(time * 14) * 0.5;
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,220,90," + (0.4 + k * 0.6).toFixed(2) + ")";
+        ctx.lineWidth = 5;
+        ctx.setLineDash([12, 10]);
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
+        ctx.restore();
+        ctx.fillStyle = "rgba(255,220,90," + (0.12 + k * 0.12).toFixed(2) + ")";
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+      } else {
+        const fade = p.t > CFG.POPUP_SOLID - 0.4
+          ? (CFG.POPUP_SOLID - p.t) / 0.4 : 1;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = "rgba(20,60,25,0.28)";
+        ctx.beginPath();
+        ctx.ellipse(p.x + p.w / 2, p.y + p.h - 2, p.w * 0.55, 10, 0, 0, 6.2832);
+        ctx.fill();
+        if (p.kind === "bench") {
+          ctx.fillStyle = "#8a6a48";
+          ctx.fillRect(p.x, p.y, p.w, 14);
+          ctx.fillRect(p.x, p.y + p.h - 14, p.w, 14);
+          ctx.fillStyle = "#a8845c";
+          ctx.fillRect(p.x, p.y + 14, p.w, p.h - 28);
+          ctx.fillStyle = "rgba(60,40,20,0.4)";
+          ctx.fillRect(p.x, p.y + p.h / 2 - 2, p.w, 4);
+        } else {
+          // tire stack: dark rings
+          const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+          ctx.fillStyle = "#2b2f36";
+          ctx.beginPath(); ctx.arc(cx, cy, p.w * 0.42, 0, 6.2832); ctx.fill();
+          ctx.strokeStyle = "#565d6b"; ctx.lineWidth = 7;
+          ctx.beginPath(); ctx.arc(cx, cy, p.w * 0.30, 0, 6.2832); ctx.stroke();
+          ctx.fillStyle = "#3a3f4a";
+          ctx.beginPath(); ctx.arc(cx, cy, p.w * 0.14, 0, 6.2832); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawBallShape(x, y, r, gold) {
+    ctx.save();
+    ctx.shadowColor = gold ? "#ffd23f" : "#ff5a5a";
+    ctx.shadowBlur = gold ? 18 : 10;
+    ctx.fillStyle = gold ? "#ffe45e" : "#e23b3b";
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, 6.2832); ctx.stroke();
+  }
+
+  function drawPickups() {
+    for (const b of balls) {
+      ctx.fillStyle = "rgba(20,60,25,0.25)";
+      ctx.beginPath();
+      ctx.ellipse(b.x, b.y + 12, 16, 5, 0, 0, 6.2832);
+      ctx.fill();
+      drawBallShape(b.x, b.y, 15, false);
+    }
+    if (star) {
+      // blink in the last 3 seconds so nobody misses the goodbye
+      if (star.age < CFG.STAR_LIFE - 3 || Math.sin(time * 16) > -0.2) {
+        const bob = Math.abs(Math.sin(time * 3)) * 8;
+        ctx.save();
+        ctx.shadowColor = "#ffd23f"; ctx.shadowBlur = 30;
+        drawStar(star.x, star.y - bob, 24, "#ffe45e", Math.sin(time * 2) * 0.2);
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawThrown() {
+    for (const b of thrown) {
+      // motion streak from the previous spot
+      ctx.strokeStyle = b.star ? "rgba(255,228,94,0.6)" : "rgba(255,255,255,0.45)";
+      ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(b.px, b.py);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      if (b.star) {
+        drawStar(b.x, b.y, 14, "#ffe45e", time * 10);
+      } else {
+        drawBallShape(b.x, b.y, 13, false);
+      }
+    }
+  }
+
+  function drawAim() {
+    // you're holding a ball: a dotted line to the nearest friend in
+    // range shows what a tap would throw at — no guessing
+    if (!carried || it !== "player") return;
+    let bi = -1, bd = CFG.THROW_R;
+    for (let i = 0; i < kids.length; i++) {
+      const d = dist(player.x, player.y, kids[i].x, kids[i].y);
+      if (d < bd) { bd = d; bi = i; }
+    }
+    if (bi < 0) return;
+    const t = kids[bi];
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([2, 12]);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y - 10);
+    ctx.lineTo(t.x, t.y - 10);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(255,90,90,0.9)";
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, CFG.KID_R + 10, 0, 6.2832);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCarried() {
+    // the ball you're holding bounces over your head
+    if (!carried || it !== "player") return;
+    const bob = Math.abs(Math.sin(player.phase * 1.3)) * 6;
+    drawBallShape(player.x, player.y - CFG.KID_R * 1.5 - bob, 13, false);
+  }
+
+  function drawFloaters() {
+    ctx.textAlign = "center";
+    ctx.font = "20px 'Press Start 2P', monospace";
+    for (const f of floaters) {
+      const k = 1 - f.t / f.life;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, k * 2));
+      ctx.strokeStyle = "rgba(60,40,0,0.9)"; ctx.lineWidth = 5;
+      ctx.strokeText(f.txt, f.x, f.y);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(f.txt, f.x, f.y);
+      ctx.restore();
+    }
+    ctx.textAlign = "left";
+  }
+
+  function drawSplash() {
+    if (!splash) return;
+    ctx.fillStyle = "rgba(10,40,25,0.35)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.font = "44px 'Press Start 2P', monospace";
+    ctx.strokeStyle = "rgba(60,40,0,0.9)"; ctx.lineWidth = 8;
+    ctx.strokeText(splash.txt, W / 2, H * 0.42);
+    ctx.fillStyle = "#ffe45e";
+    ctx.fillText(splash.txt, W / 2, H * 0.42);
+    ctx.textAlign = "left";
+  }
+
   function render() {
     drawField();
+    if (state !== "title") {
+      drawPopups();
+      drawPickups();
+    }
     if (state === "end") {
       // celebration: everyone jumps and cheers
       const jb = Math.abs(Math.sin(time * 6)) * 22;
@@ -975,11 +1535,16 @@
     } else {
       if (player) drawPlayer();
       for (let i = 0; i < kids.length; i++) drawFriend(kids[i], i);
+      drawCarried();
+      drawThrown();
+      drawAim();
     }
     drawParts();
+    drawFloaters();
     if (state !== "title") drawSlots();
     if (state === "title") drawTitle();
     else if (state === "end") drawEnd();
+    drawSplash();
   }
 
   /* ---------------- layout ---------------- */
@@ -1039,6 +1604,14 @@
     get it() { return it; }, // "player" or a kid index — who wears the badge
     get itHold() { return itHold; },
     get tagWait() { return CFG.TAG_HOLD; },
+    get level() { return level; },
+    get noBack() { return noBack; },
+    get balls() { return balls; },
+    get star() { return star; },
+    get popups() { return popups; },
+    get carried() { return carried; },
+    get thrown() { return thrown; },
+    get splash() { return splash; },
     debug: {
       player: function () { return player; },
       kids: function () { return kids; },
@@ -1064,8 +1637,16 @@
         if (state !== "play") startGame();
         kids[i].x = x; kids[i].y = y;
       },
+      speeds: function () { return S; },
+      forceLevel: function (n) { startLevel(n); },
+      placeBall: function (x, y) { balls.push({ x: x, y: y }); },
+      placeStar: function (x, y) { star = { x: x, y: y, age: 0 }; },
+      spawnPopup: function (x, y, kind) {
+        popups.push({ x: x, y: y, w: 84, h: 64, kind: kind || "bench",
+                      state: "solid", t: 0 });
+      },
     },
-    tap: function (x, y) { onDown(x, y); onUp(); },
+    tap: function (x, y) { onDown(x, y); onUp(x, y); },
     start: function () { startGame(); },
     step: function (dt) { tick(dt || 0.016); },
   };

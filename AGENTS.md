@@ -53,11 +53,27 @@ How we work on this site. Both human developers and their agents follow this.
   licensed track, and never use an AI generator's "royalty-free"
   output (plan-rights caveats fail the clean bar).
   2026-10-30 refinement (his verdict on Crazy Traffic: "good," with
-  more bass and more funk): the bass is a LOUD syncopated triangle
-  line (vol 0.2, 16th-note off-beat root/octave/fifth pops) and the
-  drums are a funk groove (kick on 1 and 3 + a ghost kick into the
+  more bass and more funk): the bass is a LOUD triangle line
+  (vol 0.2 — he liked the added bass, keep it loud) and the drums
+  are a funk groove (kick on 1 and 3 + a ghost kick into the
   next bar, snare on 2 and 4). Shared makeMusic supports div (steps
   per beat, 4 = 16ths) and explicit kicks[]/snares[] arrays.
+  Music pass #2, same day (his verdict: the loops "sound the same,"
+  "just a high note and a low note" — research the greats first):
+  every loop needs its OWN melody, not the same skeleton in a
+  different key. What the classics do: short singable phrases with
+  a variation at the end, rhythm doing the heavy lifting
+  (syncopation, off-beats, rests that breathe), a second harmony
+  voice under the lead (the NES's two pulse channels), and a
+  distinct rhythmic character per tune. So makeMusic gained an
+  optional harmony[] voice (harmonyType/harmonyVol), and each of
+  the 18 loops now has its own lead phrase, bass role (funk / walk
+  / drive / pedal / bounce), drum feel (funk / four-on-floor /
+  driving / swung / half-time / bounce), and mode — marches,
+  chants, waltzes, sea-shanties, music-box arpeggios, siren runs.
+  Melodies are original compositions inspired by those techniques,
+  never copies of classic tunes. Dance Judge keeps its own
+  per-style grooves; Crazy Traffic keeps its bespoke loop.
 - Pace: levels run short and surprises come often — short attention
   spans, keep it moving, keep something unexpected happening
   (Crazy Traffic, 2026-10-29: every level max ~30s at cruise).
@@ -68,7 +84,8 @@ How we work on this site. Both human developers and their agents follow this.
   (was 10 — his spec, changed under the fast-levels direction),
   Frisbee Dog snappier rounds (resolve 0.7s, jog 330 px/s).
   Miss Munch deliberately untouched: its calm pace is tuned for his
-  daughter. Tag, Star Guard, and the toys have no levels to quicken.
+  daughter. Star Guard and the toys have no levels to quicken.
+  Tag gained 5 quick levels 2026-10-30 (see Tag rules below).
 - Escalation: every level gets CRAZIER, not just harder — each level
   adds something new to see or tell a friend about (his 2026-10-30
   bar: the player should go "that's insane / that's crazy"). Already
@@ -79,6 +96,28 @@ How we work on this site. Both human developers and their agents follow this.
   was Passing Frenzy (levels differed only in counts/speed), so L3
   is now the championship: gold ball + double confetti + a
   center-court explosion on every goal.
+- Tag rules (sharpened 2026-10-30, his call — "that game could be a
+  lot of fun, it just needs a little more work"): NO TAG-BACKS —
+  once you tag someone, they can't tag you back until they've
+  tagged someone else (enforced for touch tags, ball throws, and
+  star bullets; the IT kid's chase skips its forbidden target;
+  a blocked touch shows "NO TAG-BACKS!"). Everybody runs FAST
+  (L1: you 320, it-kid 240, flee 180, jog 90–140 — all up from the
+  dawdle era) and faster every level (kid speeds +12%/level, you
+  +15/level, still fastest at L5: 380 vs 355). Pop-up benches and
+  tires telegraph 0.9s, then block the field 5s (movement push-out
+  like the static equipment; more of them at higher levels).
+  Dodgeball: when you're IT, touch a ball to carry it, TAP to
+  throw it at the nearest friend in range (straight line, no
+  homing — a hit tags them). Star: when you're IT, touch the
+  star for a STAR FRENZY — three gold bullets at the three
+  nearest friends at once; each hit tags that friend, IT bounces
+  between them and lands on the last one hit. Balls and stars are
+  IT-only tools (runners walk through them). 5 quick levels
+  (40/35/35/30/30s): survive the clock without the badge to clear
+  a level, wear it at the buzzer to retry it (no game over),
+  clear L5 for the champion finale. One big level digit,
+  bottom-right; "LEVEL n!" splash between levels.
 - Controls must never hide the action under the player's thumb: put the
   control in its own zone (e.g. a deck at the bottom) with the play
   field above it (Time Wings rule 2026-10-19, Crazy Traffic 2026-10-22).

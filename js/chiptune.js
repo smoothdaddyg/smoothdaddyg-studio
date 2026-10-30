@@ -130,9 +130,13 @@ function makeAudio() {
      kickVol, snareVol, hatVol. Funk upgrade (2026-10-30): div (steps
      per beat, default 2 = 8ths; 4 = 16ths for syncopation) and explicit
      kicks[] / snares[] (step indices mod steps; when present they
-     replace kickEvery / snareOff). Old configs without div/kicks/snares
-     behave exactly as before. Tones schedule through tone()/noise(),
-     so pre-gesture calls stay silent and the step clock still runs.
+     replace kickEvery / snareOff). Music pass #2 (2026-10-30): an
+     optional harmony[] voice (harmonyType, harmonyVol) — the NES
+     second pulse channel: a consonant line under the lead, so a loop
+     is never just bass + one high note. Old configs without
+     div/kicks/snares/harmony behave exactly as before. Tones schedule
+     through tone()/noise(), so pre-gesture calls stay silent and the
+     step clock still runs.
      Returns { tick(dt), start(), stop(), on, step }. */
   function makeMusic(cfg) {
     cfg = cfg || {};
@@ -150,6 +154,8 @@ function makeAudio() {
         if (b) tone(b, 0.22, { type: cfg.bassType || "triangle", vol: cfg.bassVol != null ? cfg.bassVol : 0.13 });
         const l = cfg.lead && cfg.lead[s];
         if (l) tone(l, 0.2, { type: cfg.leadType || "square", vol: cfg.leadVol != null ? cfg.leadVol : 0.03 });
+        const h = cfg.harmony && cfg.harmony[s];
+        if (h) tone(h, 0.2, { type: cfg.harmonyType || "square", vol: cfg.harmonyVol != null ? cfg.harmonyVol : 0.025 });
         const ke = cfg.kickEvery != null ? cfg.kickEvery : 8;
         const kickHere = cfg.kicks ? cfg.kicks.indexOf(s) !== -1 : (ke && s % ke === 0);
         if (kickHere) tone(cfg.kickFreq || 130, 0.12, { type: "sine", vol: cfg.kickVol != null ? cfg.kickVol : 0.16, slideTo: 42 });

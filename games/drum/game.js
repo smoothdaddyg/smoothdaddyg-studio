@@ -15,21 +15,25 @@
   const ctx = canvas.getContext("2d");
   const audio = makeAudio();
   /* Background music (2026-10-30 rollout): an original chiptune loop —
-     funk bass, sparse square stabs so the drums stay the star, kept
+     sparse chiptune stabs so the drums stay the star, kept
      under the SFX. Starts at load; the synth stays silent until the
      first tap, then plays mid-loop. */
   const MUSIC = audio.makeMusic({
-    bpm: 150, div: 4, steps: 64, bassVol: 0.2, leadVol: 0.035, hats: "odd",
-    kicks: [0, 8, 14, 16, 24, 30, 32, 40, 46, 48, 56, 62],
-    snares: [4, 12, 20, 28, 36, 44, 52, 60],
+    bpm: 150, div: 4, steps: 64,
+    bassType: "triangle", bassVol: 0.2,
+    leadType: "square", leadVol: 0.035,
+    kickVol: 0.16, snareVol: 0.05, hatVol: 0.02,
+    kicks: [0, 16, 32, 48],
+    snares: [8, 24, 40, 56],
+    hats: "none",
     bass: [82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 82.41, 0, 0, 82.41, 164.81, 0, 123.47, 0,
            82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 82.41, 0, 0, 82.41, 164.81, 0, 123.47, 0,
            98, 0, 0, 98, 0, 0, 146.83, 0, 98, 0, 0, 98, 196, 0, 146.83, 0,
            110, 0, 0, 110, 0, 0, 164.81, 0, 110, 0, 0, 110, 220, 0, 164.81, 0],
-    lead: [329.63, 0, 0, 0, 392, 0, 0, 0, 329.63, 0, 0, 0, 392, 0, 0, 0,
-           329.63, 0, 0, 0, 392, 0, 0, 0, 329.63, 0, 0, 0, 392, 0, 0, 0,
-           392, 0, 0, 0, 493.88, 0, 0, 0, 392, 0, 0, 0, 493.88, 0, 0, 0,
-           329.63, 0, 392, 0, 493.88, 0, 392, 0, 329.63, 0, 392, 0, 493.88, 0, 392, 0],
+    lead: [329.63, 0, 0, 0, 0, 0, 392, 0, 0, 0, 329.63, 0, 0, 0, 0, 0,
+           329.63, 0, 0, 0, 0, 0, 392, 0, 0, 0, 329.63, 0, 0, 0, 0, 0,
+           392, 0, 0, 0, 0, 0, 493.88, 0, 0, 0, 392, 0, 0, 0, 0, 0,
+           329.63, 0, 392, 0, 493.88, 0, 392, 0, 329.63, 0, 0, 0, 0, 0, 0, 0]
   });
   MUSIC.start();
 
