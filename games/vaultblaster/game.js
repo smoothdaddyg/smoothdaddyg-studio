@@ -3,7 +3,7 @@
    ------------------------------------------------------------
    Juan's 2026-10-30 bedtime blank-check: a top-down 2D
    adventure, Doom-like in spirit but NOT 3D. You move through
-   rooms, push a wall button and a door somewhere else opens,
+   rooms, collect colour-matched keys and use them to open doors,
    you carry a gun and find better guns as you go, levels get
    harder and harder, and sometimes you pick up a shield or a
    health pack. 5 levels, then the big finale.
@@ -24,15 +24,22 @@
    - Aiming kept simple: shots go toward the nearest enemy in
      range, otherwise in the direction you last moved. No
      twin-stick aiming, no third button.
-   - Wall buttons, doors, guns, shields and health packs all
-     work by walking into / over them — no INTERACT button.
+   - Keys, doors, guns, shields and health packs all work by
+     walking into / over them — no INTERACT button. Walk up
+     to a locked door while carrying its key and it opens,
+     using the key up.
      Move + fire is the whole control set.
    - The 84px back button stays outside the deck (top corner,
      as in other games) so it never clutters the controls.
 
    NO READING: colours, shapes, animation and sound only.
-   A wall button is the SAME colour as the door it opens.
-   Press it and that door pulses, sounds, and slides open.
+   A key is the SAME colour as the door it opens. Carry it
+   to that door and the door pulses, sounds, and slides open.
+   V2 (2026-10-31, his playtest: the challenge is planning):
+   every level is a visible chain — kill the guards, take the
+   key, open the door, find a bigger gun in the new room,
+   kill the stronger guards that need it, take the next key,
+   open the next door, reach the exit.
    NO-GAME-OVER: dying is a brief pause and a respawn with
    ALL progress intact — doors opened, gun kept, level kept,
    enemies you killed stay dead. Never a restart.
@@ -61,66 +68,70 @@
     HEARTS_MAX: 5, SHIELD_T: 6, RESPAWN_T: 1.2, DOOR_T: 0.5,
   };
   // Map legend: # wall, . floor, P start, X exit, 1-4 doors (red, cyan,
-  // yellow, purple), a-d buttons matching those doors, E chaser,
-  // F speeder, B brute, T turret, g spread gun, r rapid gun, m mega
-  // gun, S shield, H health pack, ^ spike hazard. Every map is 9
-  // rows of 13 — flood-fill validated in tools/tests (buttons
-  // reachable with doors closed, exit reachable only once its
-  // doors are opened, no door without its button).
+  // yellow, purple), a-d KEYS matching those doors (carryable, on the
+  // floor — walk over one to carry it, walk up to its door to open it
+  // and use it up), E chaser, F speeder, B brute, T turret, G guard
+  // (tough hp8 bot — the gun-gate guards), g spread gun, r rapid gun,
+  // m mega gun, S shield, H health pack, ^ spike hazard. Every map is 9
+  // rows of 13 — staged flood-fill validated in tools/tests (key1
+  // reachable with doors closed; each later key, its gun upgrade and
+  // the exit reachable only in chain order; no door without its key).
+  // Segments are vertical strips separated by full wall columns
+  // (except the door tile); L5's 4th door splits the last column.
   const MAPS = [
-    [ // L1 — one red door, two chasers, shield + health
+    [ // L1 — one red key / one red door, weak chasers
       "#############",
-      "#P...#..E...#",
-      "#.##.#.##.#.#",
-      "#....#...#.##",
-      "##.###.##.#.#",
-      "#..a.#..1.X.#",
-      "#.##...######",
-      "#..S..H..E..#",
-      "#############",
-    ],
-    [ // L2 — adds the cyan door (guards the shield) + spread gun + a speeder
-      "#############",
-      "#P..#..g#...#",
-      "#.##.#.E#.###",
-      "#......F.#.##",
-      "##.###b##.#.#",
-      "#..a##..1.X.#",
-      "#.##S2.######",
-      "#...#.H..E..#",
+      "#P....#.....#",
+      "#..Ea.#.H...#",
+      "#.....#.....#",
+      "#.E...1...X.#",
+      "#.....#.....#",
+      "#.H...#..S..#",
+      "#.....#.....#",
       "#############",
     ],
-    [ // L3 — adds the yellow door (guards the exit) + rapid gun + spikes
+    [ // L2 — +cyan door, spread gun, guard gate for key 2
       "#############",
-      "#P..#..r#.^E#",
-      "#.##.#.##.#.#",
-      "#....#b.F.#.#",
-      "##.###c###.##",
-      "#..a.#..1..H#",
-      "#.##.2.##3X##",
-      "#..S..H..E###",
-      "#############",
-    ],
-    [ // L4 — adds the purple door (guards the exit) + mega gun + turret + brute
-      "#############",
-      "#P..#..m#..B#",
-      "#.##.#.##.#T#",
-      "#....#..F.#.#",
-      "##.###d##.#.#",
-      "#..a.#..1..H#",
-      "#.##...##..##",
-      "#..S..H..E4X#",
+      "#P...#g.H#..#",
+      "#.Ea.#.S.#.H#",
+      "#....#..G#..#",
+      "#..E.1...2..#",
+      "#....#.G.#X.#",
+      "#H...#.b.#..#",
+      "#....#...#..#",
       "#############",
     ],
-    [ // L5 — everything: all four doors, brute + turret + speeder + spikes
+    [ // L3 — +yellow door, rapid gun, turret+guard gate, speeders, spikes
       "#############",
-      "#P..#..m#..B#",
-      "#.##.#.##.#T#",
-      "#..F..b.^c#.#",
-      "##.###d##.#.#",
-      "#..a##..1..H#",
-      "#.##S2.##3.##",
-      "#...#.H..E4X#",
+      "#P..#rS#S.#.#",
+      "#.a.#.T#.c#H#",
+      "#...#.^#..#.#",
+      "#E..1..2..3.#",
+      "#...#.G#F.#X#",
+      "#H.F#b.#^F#.#",
+      "#...#TH#.H#.#",
+      "#############",
+    ],
+    [ // L4 — red + cyan doors, mega gun, brute+turret gate
+      "#############",
+      "#P...#mSH#..#",
+      "#.Ea.#...#.H#",
+      "#....#BBB#..#",
+      "#....1...2..#",
+      "#...E#Bb.#X.#",
+      "#H...#.T.#..#",
+      "#....#...#..#",
+      "#############",
+    ],
+    [ // L5 — everything: all four keys and doors
+      "#############",
+      "#P..#mS#BB#G#",
+      "#.a.#.H#.c3.#",
+      "#...#..2..#d#",
+      "#E..1.G#F.#4#",
+      "#..E#G.#.F#H#",
+      "#H..#.b#^.#X#",
+      "#...#H.#HT#S#",
       "#############",
     ],
   ];
@@ -142,7 +153,7 @@
   function sndGun() { arp([523, 659, 784, 1046], 0.05, "square", 0.10); }
   function sndShield() { arp([880, 1108, 1318, 1760], 0.07, "sine", 0.09); }
   function sndHealth() { tone(523, 0.12, { type: "sine", vol: 0.11 }); tone(784, 0.18, { type: "sine", vol: 0.11, when: 0.12 }); }
-  function sndButton() { arp([392, 523, 659], 0.05, "square", 0.10); }
+  function sndKey() { arp([392, 523, 659], 0.05, "square", 0.10); }
   function sndDoor() { noiseS(0.35, { filter: "bandpass", freq: 500, vol: 0.12, slideTo: 1600 }); tone(196, 0.3, { type: "triangle", vol: 0.12, slideTo: 392 }); }
   function sndRespawn() { arp([392, 523, 659, 784, 1046], 0.07, "square", 0.10); }
   function sndFanfare() { arp([523, 659, 784, 1046, 784, 1046, 1318], 0.11, "square", 0.10); }
@@ -212,7 +223,8 @@
   let state = "title"; // title | play | dead | levelup | win
   let level = 1, gun = 0, hearts = CFG.HEARTS_MAX;
   let time = 0, deadT = 0, celebT = 0, fireCd = 0, bulletId = 0;
-  let walls = new Set(), doors = [], buttons = [], spikes = new Set();
+  let walls = new Set(), doors = [], spikes = new Set();
+  let carried = new Set(); // colours of keys currently carried
   let exit = { x: 0, y: 0 }, start = { x: 1, y: 1 };
   let enemies = [], pickups = [], bullets = [], ebullets = [], parts = [];
   let doorPulse = null; // {color, t} — the just-opened door flashes
@@ -221,7 +233,7 @@
 
   function parseMap(n) {
     const rows = MAPS[n - 1];
-    walls = new Set(); doors = []; buttons = []; spikes = new Set();
+    walls = new Set(); doors = []; spikes = new Set();
     enemies = []; pickups = [];
     const gunChar = { g: 1, r: 2, m: 3 };
     rows.forEach((row, y) => {
@@ -229,13 +241,14 @@
         const c = row[x];
         if (c === "#") walls.add(key(x, y));
         else if (c >= "1" && c <= "4") doors.push({ x: x, y: y, color: c.charCodeAt(0) - 49, open: false, openT: 0, opening: false });
-        else if (c >= "a" && c <= "d") buttons.push({ x: x, y: y, color: c.charCodeAt(0) - 97, pressed: false });
+        else if (c >= "a" && c <= "d") pickups.push({ kind: "key", color: c.charCodeAt(0) - 97, x: x + 0.5, y: y + 0.5 });
         else if (c === "^") spikes.add(key(x, y));
         else if (c === "X") exit = { x: x, y: y };
         else if (c === "P") start = { x: x, y: y };
         else if (c === "E") enemies.push({ type: "chaser", x: x + 0.5, y: y + 0.5, hp: 1, r: 0.32, alive: true, stun: 0, phase: rnd(0, 6) });
         else if (c === "F") enemies.push({ type: "speeder", x: x + 0.5, y: y + 0.5, hp: 1, r: 0.26, alive: true, stun: 0, phase: rnd(0, 6) });
         else if (c === "B") enemies.push({ type: "brute", x: x + 0.5, y: y + 0.5, hp: 3, r: 0.42, alive: true, stun: 0, phase: rnd(0, 6) });
+        else if (c === "G") enemies.push({ type: "guard", x: x + 0.5, y: y + 0.5, hp: 8, r: 0.42, alive: true, stun: 0, phase: rnd(0, 6) });
         else if (c === "T") enemies.push({ type: "turret", x: x + 0.5, y: y + 0.5, hp: 2, r: 0.36, alive: true, stun: 0, cd: 1.2, phase: 0 });
         else if (gunChar[c] != null) pickups.push({ kind: "gun", gun: gunChar[c], x: x + 0.5, y: y + 0.5 });
         else if (c === "S") pickups.push({ kind: "shield", x: x + 0.5, y: y + 0.5 });
@@ -245,6 +258,7 @@
   }
   function startLevel(n) {
     parseMap(n);
+    carried.clear();
     player.x = start.x + 0.5; player.y = start.y + 0.5;
     player.fx = 0; player.fy = -1; player.invuln = 1.0; player.spikeGrace = 0;
     bullets = []; ebullets = []; parts = []; fireCd = 0;
@@ -372,22 +386,24 @@
     if (player.invuln > 0) player.invuln -= dt;
     if (player.shieldT > 0) player.shieldT -= dt;
     if (player.spikeGrace > 0) player.spikeGrace -= dt;
-    // Wall buttons: walking onto one presses it; its doors slide open.
+    // Doors: walking up to a locked door while carrying its key opens
+    // it and uses the key up. No key, no open — the door stays shut.
     const tx = Math.floor(player.x), ty = Math.floor(player.y);
-    for (const b of buttons) {
-      if (!b.pressed && b.x === tx && b.y === ty) {
-        b.pressed = true; sndButton();
-        burst(b.x + 0.5, b.y + 0.5, DOOR_COLORS[b.color], 14, 3);
-        for (const d of doors) if (d.color === b.color && !d.open) d.opening = true;
-        doorPulse = { color: b.color, t: 1 };
-        sndDoor();
-      }
+    for (const d of doors) {
+      if (d.open || d.opening || !carried.has(d.color)) continue;
+      const adjacent = (Math.abs(d.x - tx) === 1 && d.y === ty) || (Math.abs(d.y - ty) === 1 && d.x === tx);
+      if (!adjacent) continue;
+      carried.delete(d.color); d.opening = true;
+      doorPulse = { color: d.color, t: 1 };
+      burst(d.x + 0.5, d.y + 0.5, DOOR_COLORS[d.color], 14, 3);
+      sndKey(); sndDoor();
     }
     // Pickups by walking over them.
     for (let i = pickups.length - 1; i >= 0; i--) {
       const p = pickups[i];
       if (dist(player.x, player.y, p.x, p.y) > 0.5) continue;
-      if (p.kind === "gun") { gun = p.gun; sndGun(); burst(p.x, p.y, GUNS[p.gun].color, 16, 3); }
+      if (p.kind === "key") { carried.add(p.color); sndKey(); burst(p.x, p.y, DOOR_COLORS[p.color], 14, 3); }
+      else if (p.kind === "gun") { gun = p.gun; sndGun(); burst(p.x, p.y, GUNS[p.gun].color, 16, 3); }
       else if (p.kind === "shield") { player.shieldT = CFG.SHIELD_T; sndShield(); burst(p.x, p.y, "#29faff", 16, 3); }
       else if (p.kind === "health") { hearts = Math.min(CFG.HEARTS_MAX, hearts + 2); sndHealth(); burst(p.x, p.y, "#ff3b30", 16, 3); }
       pickups.splice(i, 1);
@@ -424,7 +440,7 @@
       if (e.stun > 0) continue;
       let dx = player.x - e.x, dy = player.y - e.y;
       const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
-      let sp = (e.type === "chaser" ? 1.5 : e.type === "speeder" ? 2.4 : 1.0) * speedMul;
+      let sp = (e.type === "chaser" ? 1.5 : e.type === "speeder" ? 2.4 : e.type === "guard" ? 1.2 : 1.0) * speedMul;
       if (e.type === "speeder") { // wobble: weaves side to side as it closes in
         const w = Math.sin(time * 6 + e.phase) * 0.6;
         const nx = dx - dy * w, ny = dy + dx * w, nm = Math.hypot(nx, ny) || 1;
@@ -539,6 +555,14 @@
     ctx.bezierCurveTo(cx + s * 0.6, cy - s * 0.9, cx + s * 1.2, cy, cx, cy + s * 0.9);
     ctx.fill();
   }
+  function drawKeyIcon(cx, cy, s, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s * 0.22);
+    ctx.beginPath(); ctx.arc(cx - s * 0.35, cy, s * 0.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillRect(cx, cy - s * 0.12, s * 1.3, s * 0.24);
+    ctx.fillRect(cx + s * 0.9, cy - s * 0.12, s * 0.22, s * 0.55);
+    ctx.fillRect(cx + s * 0.55, cy - s * 0.12, s * 0.22, s * 0.4);
+  }
   function drawGunIcon(cx, cy, s, color) {
     ctx.fillStyle = color;
     ctx.fillRect(cx - s, cy - s * 0.25, s * 1.6, s * 0.5);
@@ -595,19 +619,6 @@
         ctx.globalAlpha = 1;
       }
     }
-    // Wall buttons: same colour as their door, diamond + ring.
-    for (const b of buttons) {
-      const col = DOOR_COLORS[b.color];
-      const cx = px(b.x) + TILE / 2, cy = py(b.y) + TILE / 2, r = TILE * (b.pressed ? 0.22 : 0.3);
-      ctx.fillStyle = b.pressed ? "rgba(255,255,255,0.25)" : col;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
-      ctx.closePath(); ctx.fill();
-      if (!b.pressed) {
-        ctx.strokeStyle = col; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(cx, cy, TILE * 0.42, 0, Math.PI * 2); ctx.stroke();
-      }
-    }
     // Exit: pulsing gold portal.
     {
       const cx = px(exit.x) + TILE / 2, cy = py(exit.y) + TILE / 2;
@@ -623,7 +634,8 @@
     for (const p of pickups) {
       const bob = Math.sin(time * 3 + p.x) * TILE * 0.05;
       const cx = px(p.x), cy = py(p.y) + bob;
-      if (p.kind === "gun") drawGunIcon(cx, cy, TILE * 0.22, GUNS[p.gun].color);
+      if (p.kind === "key") drawKeyIcon(cx, cy, TILE * 0.26, DOOR_COLORS[p.color]);
+      else if (p.kind === "gun") drawGunIcon(cx, cy, TILE * 0.22, GUNS[p.gun].color);
       else if (p.kind === "shield") {
         ctx.strokeStyle = "#29faff"; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(cx, cy, TILE * 0.28, 0, Math.PI * 2); ctx.stroke();
@@ -647,6 +659,11 @@
         ctx.fillStyle = "#0a0a13"; ctx.fillRect(cx - r * 0.5, cy - r * 0.5, r, r * 0.25);
         ctx.fillStyle = "#ffe14d";
         for (let i = 0; i < e.hp; i++) ctx.fillRect(cx - r + 4 + i * (r * 2 - 8) / 3, cy + r - 8, (r * 2 - 8) / 3 - 2, 4);
+      } else if (e.type === "guard") {
+        ctx.fillStyle = "#e64a19"; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        ctx.fillStyle = "#0a0a13"; ctx.fillRect(cx - r * 0.5, cy - r * 0.4, r, r * 0.3);
+        ctx.fillStyle = "#ffe14d";
+        ctx.fillRect(cx - r, cy + r - 7, r * 2 * Math.max(0, e.hp / 8), 5);
       } else { // turret
         ctx.fillStyle = "#8a8a9e"; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2); ctx.fill();
@@ -688,11 +705,13 @@
     }
     ctx.globalAlpha = 1;
     // HUD: hearts top-centre (clear of the 84px back button), level
-    // digit top-right, current gun bottom of the playfield edge.
+    // digit top-right, current gun + carried keys bottom of the playfield edge.
     if (state !== "title") {
       for (let i = 0; i < CFG.HEARTS_MAX; i++) drawHeart(W / 2 + (i - 2) * 34, 22, 11, i < hearts);
       if (typeof drawPixelNumber === "function") drawPixelNumber(ctx, level, W - 40, 14, 6, "rgba(255,255,255,0.55)", false);
       drawGunIcon(30, PH - 26, 12, GUNS[gun].color);
+      // Carried keys, pictorial, beside the gun — never in the deck.
+      [...carried].sort().forEach((c, i) => drawKeyIcon(72 + i * 28, PH - 26, 11, DOOR_COLORS[c]));
     }
     // ---- the bottom control deck (never gameplay, only controls) ----
     ctx.fillStyle = "#12121f"; ctx.fillRect(0, deckTop, W, DECK_H);
@@ -778,7 +797,8 @@
     get gun() { return gun; },
     get hearts() { return hearts; },
     get doors() { return doors; },
-    get buttons() { return buttons; },
+    get keys() { return pickups.filter((p) => p.kind === "key"); },
+    get carried() { return [...carried]; },
     get enemies() { return enemies; },
     get pickups() { return pickups; },
     get player() { return player; },
@@ -792,6 +812,7 @@
       clearMove: function () { testMove = null; },
       setFire: function (v) { testFire = !!v; },
       placePlayer: function (x, y) { player.x = x; player.y = y; },
+      giveKey: function (c) { carried.add(c); },
       forceDamage: function () { player.invuln = 0; player.spikeGrace = 0; player.shieldT = 0; hurtPlayer(1, player.x + 1, player.y); },
       setHearts: function (n) { hearts = n; },
       setGun: function (n) { gun = n; },

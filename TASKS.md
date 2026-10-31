@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- 2026-10-31 — **Vault Blaster v2** (his 2026-10-31 playtest: impressive, music good, but challenge off — levels must be planning chains, not button hunts): swap wall buttons for carryable colour-matched KEY pickups (walk over a key to carry it, walk into its door while carrying it to open it and consume it; doors locked without their key; carried keys shown as icons by the gun icon, not in the deck). Every level a visible dependency chain: kill guards -> key -> door -> gun upgrade in the new segment -> kill stronger guards that need that bigger gun -> next key -> next door -> exit. L1 1-key/1-door, L2 spread gate, L3 rapid gate + speeders/spikes, L4 mega gate + brutes/turrets, L5 all four colours. Everything else unchanged (bottom deck, mirrored FIRE, auto-aim, no-game-over, music, finale). Tests extended: key pickup, locked door, open+consume, staged chain solvability, gun-gate TTK. Shared files touched: js/games.js + games.html (catalog blurb only — "wall buttons" wording replaced with keys, forced by the mechanic swap).
 
 ## Up next
 - (add tasks here)
