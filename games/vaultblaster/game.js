@@ -298,12 +298,40 @@
         const nx = clamp(ent.x, tx, tx + 1), ny = clamp(ent.y, ty, ty + 1);
         const dx = ent.x - nx, dy = ent.y - ny, d2 = dx * dx + dy * dy;
         if (d2 >= r * r) continue;
-        if (d2 === 0) { ent.y = ty - r - 0.001; continue; }
+        if (d2 === 0) {
+          // Centre INSIDE the solid tile: push out along the
+          // smallest penetration axis (the old code only ever
+          // pushed upward, which for a top-row wall plus the
+          // 0.3 border clamp below trapped the entity inside
+          // the wall forever — exactly the photo's bug).
+          const dl = ent.x - tx, dr = tx + 1 - ent.x;
+          const dtop = ent.y - ty, dbot = ty + 1 - ent.y;
+          const m = Math.min(dl, dr, dtop, dbot);
+          if (m === dl) ent.x = tx - r;
+          else if (m === dr) ent.x = tx + 1 + r;
+          else if (m === dtop) ent.y = ty - r;
+          else ent.y = ty + 1 + r;
+          continue;
+        }
         const d = Math.sqrt(d2), push = (r - d) / d;
         ent.x += dx * push; ent.y += dy * push;
       }
     }
     ent.x = clamp(ent.x, 0.3, COLS - 0.3); ent.y = clamp(ent.y, 0.3, ROWS - 0.3);
+    // Last resort, for every caller (movement, knockback, shield
+    // bounce, enemy separation): never leave an entity centred
+    // inside a solid tile. A 0.5-tile knockback can step a centre
+    // across a wall edge in one frame, and without this the
+    // entity stays trapped there. Pop to the nearest floor tile.
+    if (isSolidTile(Math.floor(ent.x), Math.floor(ent.y))) {
+      let best = null, bd = 1e9;
+      for (let fy = 0; fy < ROWS; fy++) for (let fx = 0; fx < COLS; fx++) {
+        if (isSolidTile(fx, fy)) continue;
+        const d = Math.hypot(fx + 0.5 - ent.x, fy + 0.5 - ent.y);
+        if (d < bd) { bd = d; best = [fx, fy]; }
+      }
+      if (best) { ent.x = best[0] + 0.5; ent.y = best[1] + 0.5; }
+    }
   }
   function burst(x, y, color, n, speed) {
     for (let i = 0; i < (n || 12); i++) {

@@ -209,6 +209,21 @@ check("start() -> play, level 1, pistol, 5 hearts, no keys carried",
   D.deckRelease();
 }
 
+/* ---- wall trap (2026-10-31 photo: player + chaser stuck in
+   the top wall row) ---- */
+{
+  // A centre stepped inside a top wall tile — exactly what a
+  // 0.5-tile knockback does — must pop out to floor and move
+  // again, not stay trapped by the old upward push + border clamp.
+  D.placePlayer(4.5, 0.3); D.setMove(1, 0); step(10); D.clearMove();
+  check("centre inside a top wall tile pops out to floor",
+    T.maps[0][Math.floor(T.player.y)][Math.floor(T.player.x)] !== "#");
+  const wx = T.player.x;
+  D.setMove(1, 0); step(20); D.clearMove();
+  check("player unstuck from a wall can move again", T.player.x > wx + 0.5);
+  D.forceLevel(1); // back to spawn so the next test starts in open floor
+}
+
 /* ---- deck geometry ---- */
 check("deck tall enough for big targets", T.cfg.DECK_H >= 170);
 check("FIRE buttons >=84px across", T.cfg.FIRE_R * 2 >= 84);
