@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "vaultblaster", title: "Vault Blaster", desc: "Top-down adventure! Push wall buttons to open doors, grab better guns, and blast through 5 vaults to the finale!",
+    hue: 280, sprite: "gem", url: "games/vaultblaster/" },
   { id: "crazytraffic", title: "Crazy Traffic", desc: "Weave through traffic! One finger steers and speeds — dodge bouncing cars, unicorns, and even a plane. A new car every level!",
     hue: 20, sprite: "car", url: "games/crazytraffic/" },
   { id: "sinktheship", title: "Sink the Ship!", desc: "You're the submarine! Drag to steer, torpedoes fire themselves — sink every ship in 3 levels!",

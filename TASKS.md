@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- 2026-10-31 (overnight) — New game: **Vault Blaster** (his bedtime blank-check: top-down 2D adventure, buttons on the bottom deck). Shared files touched: js/games.js (prepend catalog entry only). New files: games/vaultblaster/ + tools/tests/vaultblaster.test.cjs. games.html JSON-LD + sitemap.xml updated to match.
 
 ## Up next
 - (add tasks here)
