@@ -188,6 +188,27 @@ T.start();
 check("start() -> play, level 1, pistol, 5 hearts, no keys carried",
   T.state === "play" && T.level === 1 && T.gun === 0 && T.hearts === 5 && T.carried.length === 0);
 
+/* ---- spawn safety + title drag (2026-10-31 bug report: player
+   stuck at spawn, looked inside a wall) ---- */
+{
+  for (let L = 1; L <= 5; L++) {
+    D.forceLevel(L);
+    const rows = T.maps[L - 1];
+    check("L" + L + " spawn is the P floor tile, not a wall",
+      rows[Math.floor(T.player.y)][Math.floor(T.player.x)] === "P");
+  }
+  // A deck drag that starts on the title screen must start the
+  // game AND move the player — the first touch must not be eaten.
+  T.toTitle();
+  const sx = T.player.x;
+  D.deckTap(200, T.cfg.deckTop + 90);
+  D.deckMove(200 + 50, T.cfg.deckTop + 90);
+  step(20);
+  check("title-screen deck drag starts the game and moves the player",
+    T.state === "play" && T.player.x > sx + 0.5);
+  D.deckRelease();
+}
+
 /* ---- deck geometry ---- */
 check("deck tall enough for big targets", T.cfg.DECK_H >= 170);
 check("FIRE buttons >=84px across", T.cfg.FIRE_R * 2 >= 84);

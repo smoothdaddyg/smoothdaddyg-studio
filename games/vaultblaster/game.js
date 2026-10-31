@@ -256,10 +256,26 @@
       }
     });
   }
+  // Spawn safety: the player must NEVER start inside a solid tile.
+  // collide() pushes out of an overlap, and if the centre tile is
+  // still solid afterwards, fall back to the nearest floor tile.
+  function placeAtStart() {
+    player.x = start.x + 0.5; player.y = start.y + 0.5;
+    collide(player, CFG.PLAYER_R);
+    if (isSolidTile(Math.floor(player.x), Math.floor(player.y))) {
+      let best = null, bd = 1e9;
+      for (let ty = 0; ty < ROWS; ty++) for (let tx = 0; tx < COLS; tx++) {
+        if (isSolidTile(tx, ty)) continue;
+        const d = Math.hypot(tx + 0.5 - player.x, ty + 0.5 - player.y);
+        if (d < bd) { bd = d; best = [tx, ty]; }
+      }
+      if (best) { player.x = best[0] + 0.5; player.y = best[1] + 0.5; }
+    }
+  }
   function startLevel(n) {
     parseMap(n);
     carried.clear();
-    player.x = start.x + 0.5; player.y = start.y + 0.5;
+    placeAtStart();
     player.fx = 0; player.fy = -1; player.invuln = 1.0; player.spikeGrace = 0;
     bullets = []; ebullets = []; parts = []; fireCd = 0;
   }
@@ -309,8 +325,13 @@
     return dist(x, y, fireL.x, fireL.y) <= CFG.FIRE_R + 6 || dist(x, y, fireR.x, fireR.y) <= CFG.FIRE_R + 6;
   }
   function onDown(x, y, id) {
-    if (state === "title") { startGame(); return; }
-    if (state === "win" && celebT > 1.5) { startGame(); return; }
+    // A tap that starts the game must NOT eat the touch: if it
+    // lands in the deck, it also engages the stick / FIRE for
+    // that same finger, so dragging straight from the title
+    // screen moves the player immediately instead of leaving
+    // him standing at spawn until a second drag.
+    if (state === "title") startGame();
+    else if (state === "win" && celebT > 1.5) startGame();
     if (state !== "play") return;
     if (inFire(x, y)) { fireIds.add(id); return; }
     if (y >= deckTop && stick.id === null) { stick.id = id; stick.ox = x; stick.oy = y; stick.dx = 0; stick.dy = 0; }
@@ -528,7 +549,7 @@
       deadT += dt;
       if (deadT >= CFG.RESPAWN_T) {
         // Respawn with ALL progress intact: doors, gun, kills, pickups kept.
-        player.x = start.x + 0.5; player.y = start.y + 0.5;
+        placeAtStart();
         hearts = CFG.HEARTS_MAX; player.invuln = 1.5;
         bullets = []; ebullets = [];
         sndRespawn(); state = "play";
@@ -806,6 +827,7 @@
     get cfg() { return { DECK_H: DECK_H, FIRE_R: CFG.FIRE_R, COLS: COLS, ROWS: ROWS, deckTop: deckTop, fireL: fireL, fireR: fireR }; },
     get music() { return MUSIC_CFG; },
     start: function () { startGame(); },
+    toTitle: function () { state = "title"; },
     step: function (dt) { tick(dt || 0.016); },
     debug: {
       setMove: function (x, y) { testMove = { x: x, y: y }; },
