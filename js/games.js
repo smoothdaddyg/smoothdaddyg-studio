@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "unicornjoust", title: "Unicorn Joust", desc: "Ride a unicorn and joust weird riders — flying pigs, a dragon, robot chickens and a space llama! Whoever is higher wins!",
+    hue: 300, sprite: "gem", url: "games/unicornjoust/" },
   { id: "vaultblaster", title: "Vault Blaster", desc: "Top-down adventure! Collect coloured keys to open doors, grab better guns, and blast through 5 vaults to the finale!",
     hue: 280, sprite: "gem", url: "games/vaultblaster/" },
   { id: "crazytraffic", title: "Crazy Traffic", desc: "Weave through traffic! One finger steers and speeds — dodge bouncing cars, unicorns, and even a plane. A new car every level!",
