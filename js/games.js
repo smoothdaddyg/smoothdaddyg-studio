@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "coloringbook", title: "Coloring Book", desc: "Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and tap to fill!",
+    hue: 45, sprite: "gem", url: "games/coloringbook/" },
   { id: "unicornjoust", title: "Unicorn Joust", desc: "Ride a unicorn and joust weird riders — flying pigs, a dragon, robot chickens and a space llama! Whoever is higher wins!",
     hue: 300, sprite: "gem", url: "games/unicornjoust/" },
   { id: "vaultblaster", title: "Vault Blaster", desc: "Top-down adventure! Collect coloured keys to open doors, grab better guns, and blast through 5 vaults to the finale!",

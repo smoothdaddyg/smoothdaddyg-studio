@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Coloring Book — SmoothDaddyG</title>
+  <meta name="description" content="Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and tap to fill!">
+  <link rel="canonical" href="https://smoothdaddyg.com/games/coloringbook/">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SmoothDaddyG">
+  <meta property="og:title" content="Coloring Book — SmoothDaddyG">
+  <meta property="og:description" content="Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and tap to fill!">
+  <meta property="og:url" content="https://smoothdaddyg.com/games/coloringbook/">
+  <meta property="og:image" content="https://smoothdaddyg.com/games/coloringbook/cover.webp">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/style.css?v=202611082053">
+  <style>
+    html, body { height: 100%; overflow: hidden; background: #0a0a13; }
+    #app { display: flex; flex-direction: column; height: 100%; }
+    /* The paper page: a white card floating in the dark room. */
+    #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 12px 6px; }
+    #paper { background: #fffdf6; border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.55), inset 0 0 0 3px #f3e9d2; width: min(100%, 62vh); aspect-ratio: 1; max-height: 100%; display: flex; align-items: center; justify-content: center; touch-action: none; }
+    #pic { width: 100%; height: 100%; touch-action: none; }
+    #pic svg { width: 100%; height: 100%; display: block; }
+    #dots { display: flex; gap: 7px; justify-content: center; padding: 10px 0 2px; min-height: 24px; }
+    #dots .dot { width: 13px; height: 13px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.35); }
+    #dots .dot.on { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
+    /* The crayon box: the bottom deck. */
+    #deck { flex: none; background: #12121f; border-top: 3px solid #ff9f2e; display: flex; align-items: center; gap: 8px; padding: 14px 10px calc(10px + env(safe-area-inset-bottom)); }
+    .deckbtn { flex: none; width: 64px; height: 64px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.55); background: #1e1e30; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+    .deckbtn:active { transform: scale(0.92); }
+    .deckbtn svg { width: 38px; height: 38px; }
+    #newBtn { width: 76px; height: 76px; background: #ff9f2e; border-color: #fff; }
+    #newBtn.dim { opacity: 0.35; }
+    #palette { flex: 1; display: flex; flex-wrap: wrap; gap: 5px 7px; align-items: flex-end; justify-content: center; padding-top: 18px; }
+    /* A crayon: pointed tip, coloured body, paper wrapper band. */
+    .crayon { position: relative; width: 30px; height: 64px; border: none; border-radius: 3px 3px 7px 7px; background: var(--c); cursor: pointer; padding: 0; box-shadow: inset 0 -6px 0 rgba(0,0,0,0.18); }
+    .crayon::before { content: ""; position: absolute; left: 0; top: -15px; border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 15px solid var(--c); filter: brightness(0.92); }
+    .crayon::after { content: ""; position: absolute; left: 0; right: 0; top: 22px; height: 22px; background: #e8d9b0; border-top: 3px solid #2b2b2b; border-bottom: 3px solid #2b2b2b; }
+    .crayon.sel { outline: 3px solid #fff; outline-offset: 3px; transform: translateY(-9px); box-shadow: 0 0 16px rgba(255,255,255,0.75); }
+    .crayon:active { transform: translateY(-4px); }
+    /* The eraser: a pink block, not a crayon. */
+    .eraser { position: relative; width: 34px; height: 52px; border: none; border-radius: 8px; background: #ff9fb0; cursor: pointer; padding: 0; box-shadow: inset 0 -6px 0 rgba(0,0,0,0.15); color: #fff; font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+    .eraser.sel { outline: 3px solid #fff; outline-offset: 3px; transform: translateY(-9px); box-shadow: 0 0 16px rgba(255,255,255,0.75); }
+    /* Thumbnail gallery overlay (picker + finale). */
+    #galleryOverlay { position: fixed; inset: 0; z-index: 20; background: rgba(10,10,19,0.96); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 18px; overflow-y: auto; }
+    #galleryOverlay[hidden] { display: none; }
+    #thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: min(100%, 560px); }
+    .thumb { position: relative; background: #fffdf6; border: none; border-radius: 14px; padding: 6px; cursor: pointer; aspect-ratio: 1; }
+    .thumb svg { width: 100%; height: 100%; display: block; }
+    .thumb .star { position: absolute; top: -8px; right: -8px; width: 34px; height: 34px; color: #ffe14d; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
+    .thumb .star svg { width: 100%; height: 100%; }
+    #playAgainBtn { font-family: 'Press Start 2P', monospace; font-size: 18px; color: #0a0a13; background: #ffe14d; border: none; border-radius: 14px; padding: 20px 28px; cursor: pointer; box-shadow: 0 6px 0 #c9a90e; }
+    #playAgainBtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c9a90e; }
+    #galleryCloseBtn { position: absolute; top: 16px; right: 16px; width: 56px; height: 56px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.55); background: #1e1e30; color: #fff; font-size: 26px; cursor: pointer; }
+    #fx { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="stage">
+      <div id="paper"><div id="pic" aria-label="Coloring page. Pick a crayon, then tap a part of the picture to fill it in."></div></div>
+      <div id="dots" aria-hidden="true"></div>
+    </div>
+    <div id="deck">
+      <button id="galleryBtn" class="deckbtn" aria-label="All pictures">
+        <svg viewBox="0 0 40 40" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="6" y="6" width="11" height="11" rx="2" fill="#ff3b30" stroke="none"/><rect x="23" y="6" width="11" height="11" rx="2" fill="#ffe14d" stroke="none"/><rect x="6" y="23" width="11" height="11" rx="2" fill="#3ddc5f" stroke="none"/><rect x="23" y="23" width="11" height="11" rx="2" fill="#2e9bff" stroke="none"/></svg>
+      </button>
+      <div id="palette" aria-label="Crayon box"></div>
+      <button id="newBtn" class="deckbtn" aria-label="New picture">
+        <svg viewBox="0 0 40 40" fill="none" stroke="#0a0a13" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12 H30 A5 5 0 0 1 30 22 H12"/><path d="M8 7 L6 12 L11 14"/><path d="M34 28 H10 A5 5 0 0 1 10 18 H28"/><path d="M32 33 L34 28 L29 26"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="galleryOverlay" hidden>
+    <button id="galleryCloseBtn" aria-label="Back to coloring">&#10005;</button>
+    <div id="thumbs"></div>
+    <button id="playAgainBtn" hidden>PLAY AGAIN</button>
+  </div>
+  <canvas id="fx"></canvas>
+  <div class="game-ui">
+    <a href="../../games.html" aria-label="Back to games">&#9664;</a>
+  </div>
+  <script src="../../js/chiptune.js?v=202611082053"></script>
+  <script src="../../js/plays.js?v=202611082053"></script>
+  <script src="game.js?v=202611082053"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- 2026-11-08 — New game: **Coloring Book** (#23; Danny's call: a coloring book — pictures of cool things (unicorn, rocket, spaceship, satellite, flower) to color in, a bunch of colors to pick from, tap a color then tap regions to fill them). Updated from his daughter's real photos: palette is a CRAYON BOX (crayon-shaped swatches, classic crayon colors), a 6th page added — a friendly CAT in the style of her activity book (big face, pointy ears, fluffy chest, curled tail). 6 pages, inline SVG line art, 10-11 big tappable regions per page. RANDOM every playthrough: fresh load and PLAY AGAIN shuffle the pictures; finishing one goes to a random unfinished one; NEW PICTURE button (shuffle icon, in the deck) re-rolls to a random different unfinished picture any time, never erasing work. Thumbnail gallery stays (tap any picture to jump to it). Pop sound + sparkle per fill, dot progress, page-complete celebration then auto-advance, grand finale gallery + PLAY AGAIN reset. Original music-box chiptune, sound always on, 84px back button. NO connect-the-dots or matching in this game — separate future ideas. (Bob)
 
 ## Up next
 - (add tasks here)
