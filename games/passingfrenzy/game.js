@@ -6,6 +6,12 @@
    ONE interaction: tap anywhere to throw the ball there.
    Lead your teammates, dodge interceptions, tap the top basket
    to shoot. First to 7 wins a level (2026-10-30 quick levels).
+   2026-11-08 (his verdict: "it's a hit... so fun to play"): winning
+   level 3 runs a grand finale — fireworks + confetti keep bursting
+   on the win screen until PLAY AGAIN restarts from level 1. And a
+   basket off a genuinely complicated play (3+ passes in the
+   possession, or one throw spanning half the court) flashes a random
+   praise blurb for one celebration beat; simple scores get none.
    Red defenders are fast and steal by getting CLOSE — keep the ball
    moving. Hold it more than 4 seconds and the shot clock takes it
    (watch the ring shrink, listen for the beeps). No fouls, no
@@ -44,6 +50,12 @@
     THROWER_GRACE: 0.20,  // s before the thrower can re-catch their own pass
     CELEBRATE_T: 1.7,     // basket celebration (s)
     SPAWN_MARGIN: 36,     // players spawn/despawn this far off-screen
+    PRAISE_CHAIN: 3,      // a "complicated assist": this many completed blue
+                          // passes in one possession before the basket
+    LONG_THROW: 0.5,      // ...or one throw spanning this fraction of the
+                          // court height (a cross-court dime / a bomb from
+                          // deep). Either one earns a praise flash.
+    FIREWORK_EVERY: 0.22, // grand-finale firework cadence (s) on the win screen
   };
 
   /* Three levels — his spec (2026-10-26): "Hard and harder. Faster and
@@ -57,6 +69,14 @@
     { blue: 10, red: 8, min: 100, max: 240 },
   ];
   function levelCfg() { return LEVELS[level - 1]; }
+
+  /* Praise blurbs (2026-11-08, his call): flashed for one celebration
+     beat only when a blue basket came off a genuinely complicated play —
+     3+ passes in the possession, or one throw spanning half the court.
+     Short, varied, picked at random every time; simple scores get none. */
+  const PRAISE = ["WOW!", "NICE!", "BEAUTIFUL!", "WHAT A PLAY!", "SMOOTH!",
+                  "UNBELIEVABLE!", "SWEET!", "TOO COOL!", "WHAT A PASS!",
+                  "INCREDIBLE!"];
 
   const canvas = document.getElementById("stage");
   const ctx = canvas.getContext("2d");
@@ -102,6 +122,11 @@
   let winner = null;           // 'blue' | 'red'
   let celebrateT = 0;
   let scoredBy = null;         // who just scored (for the reset)
+  let passChain = 0;           // completed blue passes in this possession
+  let longestPass = 0;         // longest blue pass (px) in this possession
+  let praiseText = null;       // praise blurb flashing during a celebration
+  let praiseT = 0;             // praise lifetime (s)
+  let winT = 0;                // grand-finale firework timer (s)
 
   let players = [];            // {team,x,y,vx,vy,speed,phase,hasBall}
   let parts = [];              // particles {x,y,vx,vy,t,life,hue,r}
@@ -234,6 +259,7 @@
     ball.shotBy = null; ball.shotTarget = null;
     ball.thrower = null; ball.throwerT = 0;
     ball.possT = 0; ball.beepT = 0; // fresh shot clock
+    passChain = 0; longestPass = 0; // new possession, new assist chain
   }
 
   /* ---------------- throwing & catching ---------------- */
@@ -253,6 +279,11 @@
     ball.thrower = thrower || null;
     ball.throwerT = 0;
     ball.trail = [];
+    if (byTeam === "blue" && !isShot) {
+      // a pass (not a shot): track the longest dime of this possession —
+      // a cross-court throw is one of the two "wow" triggers
+      if (d > longestPass) longestPass = d;
+    }
     audio.tone(300, 0.12, { type: "square", vol: 0.08, slideTo: 620 });
   }
 
@@ -263,6 +294,9 @@
     p.hasBall = true;
     ball.x = p.x; ball.y = p.y;
     ball.trail = [];
+    // a completed blue pass (not a caught shot): one more link in this
+    // possession's assist chain — 3+ links before a basket earns praise
+    if (!intercepted && ball.thrower && ball.thrower.team === "blue" && !ball.shotBy) passChain++;
     // a catch kills any shot in progress, and gives the new holder a fresh clock
     ball.shotBy = null; ball.shotTarget = null;
     ball.possT = 0; ball.beepT = 0;
@@ -391,6 +425,19 @@
     scoredBy = team;
     state = "celebrate";
     celebrateT = CFG.CELEBRATE_T;
+    if (team === "blue") {
+      // complicated-assist praise (2026-11-08, his call): a basket earns a
+      // flashing praise blurb only when the play was genuinely "wow" — 3+
+      // completed passes in the possession, or one throw spanning half the
+      // court (a cross-court dime, or the scoring bomb itself from deep).
+      // A simple 1-2 pass score gets no blurb at all.
+      const longThrow = Math.max(longestPass, ball.dist || 0) >= CFG.LONG_THROW * H;
+      if (passChain >= CFG.PRAISE_CHAIN || longThrow) {
+        praiseText = PRAISE[(Math.random() * PRAISE.length) | 0];
+        praiseT = CFG.CELEBRATE_T;
+        audio.arp([1047, 1319, 1568], 0.07, "square", 0.10);
+      }
+    }
     const b = team === "blue" ? basketTop : basketBottom;
     // Championship level: double confetti + a center-court explosion.
     confettiBlast(b.x, b.y, level === 3 ? 220 : 110);
@@ -439,6 +486,7 @@
   function startLevel(n) {
     level = n;
     blueScore = 0; redScore = 0; winner = null; scoredBy = null;
+    praiseText = null; praiseT = 0; // a fresh level never inherits a stale blurb
     players = []; parts = []; rings = [];
     ball = { mode: "none", x: 0, y: 0, carrier: null,
              tx: 0, ty: 0, dx: 0, dy: 0, dist: 0,
@@ -516,6 +564,7 @@
             audio.arp([523, 659, 784, 1047], 0.09, "square", 0.12);
           } else {
             state = "win";
+            winT = 0; // first firework bursts on the next tick
             if (winner === "blue") {
               confettiBlast(W / 2, H * 0.4, 160);
               audio.arp([523, 587, 659, 784, 880, 1047, 1175, 1319, 1568], 0.11, "square", 0.12);
@@ -537,6 +586,27 @@
     else if (state === "levelup") {
       levelSplashT -= dt;
       if (levelSplashT <= 0) startLevel(level);
+    }
+
+    // grand-finale fireworks: while the L3 win screen is up, rockets keep
+    // bursting over the court and confetti rains down — the "yay you did
+    // it" show runs until PLAY AGAIN (2026-11-08)
+    if (state === "win" && winner === "blue") {
+      winT -= dt;
+      if (winT <= 0) {
+        winT = CFG.FIREWORK_EVERY;
+        const hues = [45, 190, 315, 150, 265, 0];
+        const fx = rnd(50, Math.max(51, W - 50)), fy = rnd(70, H * 0.55);
+        burst(fx, fy, hues[(Math.random() * hues.length) | 0], 26, 340);
+        rings.push({ x: fx, y: fy, r: 10, t: 0, life: 0.5, hue: 45 });
+        if (Math.random() < 0.4) confettiBlast(rnd(60, Math.max(61, W - 60)), 30, 40);
+      }
+    }
+
+    // the praise banner lives exactly as long as the basket celebration
+    if (praiseT > 0) {
+      praiseT -= dt;
+      if (praiseT <= 0) praiseText = null;
     }
 
     // particles
@@ -781,6 +851,29 @@
     }
     ctx.textAlign = "left";
     bigButton(blueWon ? "PLAY AGAIN" : "TRY AGAIN");
+    if (blueWon) {
+      // the finale show plays ON TOP of the dimmed screen — fireworks and
+      // confetti over the win text, not buried under it
+      drawParts();
+    }
+  }
+
+  function drawPraise() {
+    // the "wow" blurb: one big glowing word, center court, pulsing —
+    // no reading burden, just a flash of praise for a complicated assist.
+    // 24px keeps even the longest blurb ("UNBELIEVABLE!") inside a
+    // 360px-wide phone screen.
+    const pulse = 1 + Math.sin(time * 10) * 0.06;
+    ctx.save();
+    ctx.translate(W / 2, H * 0.30);
+    ctx.scale(pulse, pulse);
+    ctx.shadowColor = "#ffd700"; ctx.shadowBlur = 30;
+    ctx.fillStyle = "#ffe14d";
+    ctx.font = "24px 'Press Start 2P', monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(praiseText, 0, 0);
+    ctx.restore();
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
   }
 
   function drawParts() {
@@ -825,6 +918,8 @@
       ctx.strokeStyle = "rgba(255,225,77," + a.toFixed(2) + ")";
       ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(b.x, b.y, 34, 0, 6.2832); ctx.stroke();
+      // a complicated assist earns its praise flash, center court
+      if (praiseText) drawPraise();
     } else if (state === "levelup") {
       ctx.fillStyle = "rgba(4,8,18,0.45)";
       ctx.fillRect(0, 0, W, H);
@@ -873,6 +968,10 @@
     get blueScore() { return blueScore; },
     get redScore() { return redScore; },
     get players() { return players.length; },
+    get parts() { return parts.length; },
+    get praise() { return praiseText; },
+    get praiseList() { return PRAISE; },
+    get passChain() { return passChain; },
     get ballMode() { return ball.mode; },
     get cfg() { return CFG; },
     get musicOn() { return music.on; },

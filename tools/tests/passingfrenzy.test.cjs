@@ -7,6 +7,11 @@
    carrier-runoff turnovers, and the 3 levels (2026-10-26): winning L1
    advances to L2, winning L2 advances to L3, winning L3 is the finale,
    and a red level win replays the same level (no game over).
+   2026-11-08: grand finale — winning L3 keeps fireworks + confetti
+   bursting on the win screen until PLAY AGAIN (red wins get no show);
+   complicated-assist praise — a blue basket off 3+ passes in the
+   possession, or one throw spanning half the court, flashes a random
+   praise blurb for one celebration beat; simple 1-2 pass baskets get none.
    Run: node tools/tests/passingfrenzy.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -167,6 +172,131 @@ F.tap(200, 476);
 eq("try again -> play", F.state, "play");
 eq("try again replays the same level", F.level, 1);
 eq("scores reset on try again", F.blueScore + F.redScore, 0);
+
+// ---- PRAISE + FINALE (2026-11-08) ----
+// helpers: complete one pass to `mate` standing at (tx, ty), and shoot
+// from (x, y) at the top basket. Reds stay parked off-screen; every other
+// blue is cleared out of the lane. Both return true when the play lands.
+function passTo(mate, tx, ty) {
+  const carrier = F.debug.ball().carrier;
+  carrier.x = 150; carrier.y = 550; // deep, far from the top basket
+  mate.x = tx; mate.y = ty;
+  for (const p of blues()) {
+    if (p === carrier || p === mate) continue;
+    p.x = 30; p.y = 30; // everyone else out of the pass lane
+  }
+  F.tap(tx, ty);
+  let caught = false;
+  for (let i = 0; i < 90 && !caught; i++) {
+    F.step(0.016);
+    if (F.ballMode === "carried") caught = true;
+  }
+  return caught;
+}
+function shootFrom(x, y) {
+  const shooter = F.debug.ball().carrier;
+  shooter.x = x; shooter.y = y;
+  for (const p of blues()) {
+    if (p === shooter) continue;
+    p.x = 30; p.y = 30; // everyone else out of the shot lane
+  }
+  F.tap(200, 108); // top basket = shoot
+  let scored = false;
+  for (let i = 0; i < 200 && !scored; i++) {
+    F.step(0.016);
+    if (F.state === "celebrate") scored = true;
+  }
+  return scored;
+}
+
+// PRAISE: a basket off 3+ completed passes flashes a random blurb
+F.start();
+parkReds();
+freezeAll();
+const m1 = blues().find((p) => p !== F.debug.ball().carrier);
+const m2 = blues().find((p) => p !== F.debug.ball().carrier && p !== m1);
+const m3 = blues().find((p) => p !== F.debug.ball().carrier && p !== m1 && p !== m2);
+ok("3-pass chain completes (1)", passTo(m1, 250, 400));
+eq("chain is 1 after first pass", F.passChain, 1);
+ok("3-pass chain completes (2)", passTo(m2, 150, 350));
+eq("chain is 2 after second pass", F.passChain, 2);
+ok("3-pass chain completes (3)", passTo(m3, 250, 300));
+eq("chain is 3 after third pass", F.passChain, 3);
+ok("chain shot scores", shootFrom(200, 300));
+eq("state is celebrate after chain basket", F.state, "celebrate");
+ok("praise flashes after a 3-pass basket", F.praise !== null);
+ok("praise is one of the blurbs", F.praiseList.includes(F.praise));
+// the blurb lives one celebration beat, then clears; next possession fresh
+F.step(2.0);
+eq("back to play after praise basket", F.state, "play");
+eq("praise clears after the celebration", F.praise, null);
+eq("chain resets for the new possession", F.passChain, 0);
+
+// PRAISE: a bomb from deep also earns a blurb — one long throw, no chain
+F.start();
+parkReds();
+freezeAll();
+ok("long bomb scores", shootFrom(200, 620));
+eq("no chain on the bomb", F.passChain, 0);
+ok("praise flashes after a long bomb", F.praise !== null);
+
+// NO PRAISE: a simple 1-pass basket, short shot — the everyday score
+F.start();
+parkReds();
+freezeAll();
+const sm = blues().find((p) => p !== F.debug.ball().carrier);
+ok("simple pass completes", passTo(sm, 250, 400));
+eq("chain is 1 after a simple pass", F.passChain, 1);
+ok("simple shot scores", shootFrom(200, 300));
+eq("state is celebrate after simple basket", F.state, "celebrate");
+eq("no praise for a simple 1-pass basket", F.praise, null);
+
+// NO PRAISE: two passes then a short shot is still an ordinary play
+F.start();
+parkReds();
+freezeAll();
+const t1 = blues().find((p) => p !== F.debug.ball().carrier);
+const t2 = blues().find((p) => p !== F.debug.ball().carrier && p !== t1);
+ok("two-pass chain completes (1)", passTo(t1, 250, 400));
+ok("two-pass chain completes (2)", passTo(t2, 150, 350));
+eq("chain is 2 after two passes", F.passChain, 2);
+ok("two-pass shot scores", shootFrom(200, 300));
+eq("no praise for a 2-pass basket", F.praise, null);
+
+// GRAND FINALE: winning level 3 keeps fireworks bursting on the win
+// screen — the show must still be going seconds later, long after the
+// one-off entry blasts have faded
+F.start();
+parkReds();
+F.forceScore("blue", 5); // level 1 won
+F.step(2.0);
+lvlGuard = 0;
+while (F.state !== "play" && lvlGuard++ < 40) F.step(0.1);
+F.forceScore("blue", 5); // level 2 won
+F.step(2.0);
+lvlGuard = 0;
+while (F.state !== "play" && lvlGuard++ < 40) F.step(0.1);
+eq("finale run reaches level 3", F.level, 3);
+F.forceScore("blue", 5); // level 3 won — the finale
+F.step(2.0);
+eq("state is win after finale", F.state, "win");
+for (let i = 0; i < 6; i++) {
+  for (let j = 0; j < 30; j++) F.step(0.016); // 0.48s chunks, ~3s total
+  ok("finale still bursting " + (i + 1) + "/6", F.parts > 0);
+}
+// ...and PLAY AGAIN from the finale restarts the whole game at level 1
+F.tap(200, 476);
+eq("play again from finale -> play", F.state, "play");
+eq("play again from finale -> level 1", F.level, 1);
+
+// NO FINALE FOR RED: a red win gets no fireworks show at all
+F.start();
+parkReds();
+F.forceScore("red", 5);
+F.step(2.0);
+eq("state is win (red, no-finale check)", F.state, "win");
+for (let i = 0; i < 120; i++) F.step(0.016); // ~2s — every entry blast has faded
+eq("no fireworks on a red win", F.parts, 0);
 
 // config sanity
 ok("win score is 7 (2026-10-30 quick levels)", F.cfg.WIN_SCORE === 7);
