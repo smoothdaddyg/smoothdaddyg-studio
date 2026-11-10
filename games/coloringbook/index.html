@@ -4,27 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Coloring Book — SmoothDaddyG</title>
-  <meta name="description" content="Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and tap to fill!">
+  <meta name="description" content="Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and scribble back and forth, just like a real crayon — inside the lines or out!">
   <link rel="canonical" href="https://smoothdaddyg.com/games/coloringbook/">
   <meta name="robots" content="index, follow">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="SmoothDaddyG">
   <meta property="og:title" content="Coloring Book — SmoothDaddyG">
-  <meta property="og:description" content="Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and tap to fill!">
+  <meta property="og:description" content="Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and scribble back and forth, just like a real crayon — inside the lines or out!">
   <meta property="og:url" content="https://smoothdaddyg.com/games/coloringbook/">
   <meta property="og:image" content="https://smoothdaddyg.com/games/coloringbook/cover.webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../../css/style.css?v=202611082053">
+  <link rel="stylesheet" href="../../css/style.css?v=202611100634">
   <style>
     html, body { height: 100%; overflow: hidden; background: #0a0a13; }
     #app { display: flex; flex-direction: column; height: 100%; }
-    /* The paper page: a white card floating in the dark room. */
+    /* The paper page: a white card floating in the dark room.
+       The paint canvas sits under the line art, so crayon
+       spills outside the lines like the real thing. */
     #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 12px 6px; }
-    #paper { background: #fffdf6; border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.55), inset 0 0 0 3px #f3e9d2; width: min(100%, 62vh); aspect-ratio: 1; max-height: 100%; display: flex; align-items: center; justify-content: center; touch-action: none; }
-    #pic { width: 100%; height: 100%; touch-action: none; }
-    #pic svg { width: 100%; height: 100%; display: block; }
+    #paper { position: relative; background: #fffdf6; border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.55), inset 0 0 0 3px #f3e9d2; width: min(100%, 62vh); aspect-ratio: 1; max-height: 100%; display: flex; align-items: center; justify-content: center; touch-action: none; }
+    #paint { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 18px; }
+    #pic { position: relative; z-index: 1; width: 100%; height: 100%; touch-action: none; pointer-events: none; }
+    #pic svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+    #cursor { position: absolute; z-index: 2; transform: translate(-50%, -50%); border: 3px solid #fff; border-radius: 50%; pointer-events: none; display: none; box-shadow: 0 0 0 2px rgba(0,0,0,0.3); }
     #dots { display: flex; gap: 7px; justify-content: center; padding: 10px 0 2px; min-height: 24px; }
     #dots .dot { width: 13px; height: 13px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.35); }
     #dots .dot.on { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
@@ -50,7 +54,8 @@
     #galleryOverlay[hidden] { display: none; }
     #thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: min(100%, 560px); }
     .thumb { position: relative; background: #fffdf6; border: none; border-radius: 14px; padding: 6px; cursor: pointer; aspect-ratio: 1; }
-    .thumb svg { width: 100%; height: 100%; display: block; }
+    .thumb img.thumbpaint { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); border-radius: 8px; }
+    .thumb svg { position: relative; width: 100%; height: 100%; display: block; }
     .thumb .star { position: absolute; top: -8px; right: -8px; width: 34px; height: 34px; color: #ffe14d; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
     .thumb .star svg { width: 100%; height: 100%; }
     #playAgainBtn { font-family: 'Press Start 2P', monospace; font-size: 18px; color: #0a0a13; background: #ffe14d; border: none; border-radius: 14px; padding: 20px 28px; cursor: pointer; box-shadow: 0 6px 0 #c9a90e; }
@@ -62,7 +67,7 @@
 <body>
   <div id="app">
     <div id="stage">
-      <div id="paper"><div id="pic" aria-label="Coloring page. Pick a crayon, then tap a part of the picture to fill it in."></div></div>
+      <div id="paper"><canvas id="paint" width="800" height="800"></canvas><div id="pic" aria-label="Coloring page. Pick a crayon, then scribble back and forth to color it in — inside the lines or out!"></div><div id="cursor"></div></div>
       <div id="dots" aria-hidden="true"></div>
     </div>
     <div id="deck">
@@ -84,8 +89,8 @@
   <div class="game-ui">
     <a href="../../games.html" aria-label="Back to games">&#9664;</a>
   </div>
-  <script src="../../js/chiptune.js?v=202611082053"></script>
-  <script src="../../js/plays.js?v=202611082053"></script>
-  <script src="game.js?v=202611082053"></script>
+  <script src="../../js/chiptune.js?v=202611100634"></script>
+  <script src="../../js/plays.js?v=202611100634"></script>
+  <script src="game.js?v=202611100634"></script>
 </body>
 </html>

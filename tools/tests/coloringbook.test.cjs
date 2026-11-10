@@ -1,14 +1,23 @@
-/* Node test for Coloring Book (window.__colorTest).
-   Danny's 2026-11-08 call, shaped by his daughter's real
-   photos: a crayon-box palette (crayon-shaped swatches,
-   classic crayon colors) and 6 pictures — unicorn, rocket,
-   spaceship, satellite, flower, and a cat in her activity
-   book's style. Pick a crayon, tap a region to fill it.
+/* Node test for Coloring Book v2 — real crayon (window.__colorTest).
+   Danny's 2026-11-10 call: "change the color book game to
+   work more like a real crayon. U have it where u just tap
+   and the color shows up. That's not fun. In the real word
+   we move our hands back and forth and color the area.
+   Doesn't have to be in the lines either. That's the beauty
+   of coloring. U try to stay in the lines."
+   So: pick a crayon, SCRIBBLE back and forth — strokes lay
+   down waxy crayon under the line art, spilling outside
+   the lines like the real thing. A page is finished when
+   about half its line-art area is colored in (paint
+   outside the lines shows, but doesn't count). 10 dots
+   light up as you color, each keeping the crayon color
+   that earned it; the eraser scrubs paint back off.
    RANDOM every playthrough: fresh load and PLAY AGAIN
    shuffle the pictures; finishing one rolls to a random
    unfinished one; the NEW PICTURE button re-rolls any
    time, never erasing work. Gallery picker jumps to any
-   picture. Color all 6 for the finale gallery + PLAY AGAIN.
+   picture, thumbnails show the real coloring. Color all 6
+   for the finale gallery + PLAY AGAIN.
    Run: node tools/tests/coloringbook.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -51,7 +60,7 @@ const sandbox = {
     tone: noop, noise: noop, arp: noop, unlock: noop, state: () => "running",
     makeMusic: () => ({ tick: noop, start: noop, stop: noop, on: false, step: 0 }),
   }),
-  Math, JSON, Object, Array,
+  Math, JSON, Object, Array, Uint8Array, parseInt,
 };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
@@ -66,23 +75,30 @@ function test(name, fn) {
 }
 function eq(a, b, m) { if (a !== b) throw new Error(m + " (got " + a + ", want " + b + ")"); }
 function ok(c, m) { if (!c) throw new Error(m); }
+function approx(a, b, tol, m) { if (Math.abs(a - b) > tol) throw new Error(m + " (got " + a + ", want ~" + b + ")"); }
 function stepN(n, dt) { for (let i = 0; i < n; i++) T.step(dt || 0.016); }
 function isPerm(a) {
   return a.length === 6 && a.slice().sort((x, y) => x - y).join(",") === "0,1,2,3,4,5";
 }
-// Finish the current picture the honest way: fill every
-// region but one, then tap the last one with a crayon.
+// Scribble back and forth across the whole page, like a
+// real hand — a zigzag of long strokes.
+function scribblePage() {
+  const pts = [];
+  for (let y = 20; y <= 380; y += 40) {
+    pts.push({ x: 20, y: y });
+    pts.push({ x: 380, y: y + 20 });
+  }
+  T.stroke(pts);
+}
+// Finish the current picture the honest way: scribble
+// until the page throws its celebration.
 function finishCurrent() {
-  const regs = T.pages[T.current].regions;
-  T.debug.fillAllBut(regs[regs.length - 1]);
-  eq(T.state, "color", "not done with one region left");
-  T.selectColor(0);
-  T.tapRegion(regs[regs.length - 1]);
-  eq(T.state, "celebrate", "last fill throws the celebration");
+  T.debug.paintToComplete();
+  eq(T.state, "celebrate", "scribbling to half the picture throws the celebration");
   ok(T.isDone(T.current), "page marked finished");
 }
 
-test("boots with 6 pictures, 8-14 big regions each, all blank", () => {
+test("boots with 6 pictures, 8-14 regions each, all blank", () => {
   T.start();
   eq(T.state, "color", "coloring right away");
   eq(T.pages.length, 6, "six pictures");
@@ -94,7 +110,9 @@ test("boots with 6 pictures, 8-14 big regions each, all blank", () => {
   ok(isPerm(T.order), "order is a shuffle of all 6");
   eq(T.current, T.order[0], "first picture is the shuffled first");
   eq(T.done.length, 0, "nothing finished yet");
-  eq(T.progress.filled, 0, "no regions filled yet");
+  eq(T.progress.coverage, 0, "nothing colored yet");
+  eq(T.progress.dots, 0, "no dots lit yet");
+  eq(T.progress.total, 10, "ten dots to earn");
   eq(T.unfinishedCount, 6, "six unfinished");
 });
 
@@ -112,46 +130,83 @@ test("crayon box: 13 crayon colors plus an eraser", () => {
   eq(T.selectedColor, "#ff7518", "selected color is orange");
 });
 
-test("pick a crayon, tap a region, it fills; recoloring works", () => {
+test("scribbling back and forth colors the page; dots light up as it fills", () => {
   T.start();
-  const r0 = T.pages[T.current].regions[0];
   T.selectColor(0); // red
-  ok(T.tapRegion(r0), "tap fills the region");
-  eq(T.fills[T.current][r0], "#ee204d", "region is red");
-  eq(T.progress.filled, 1, "one region filled");
-  T.selectColor(6); // blue
-  T.tapRegion(r0);
-  eq(T.fills[T.current][r0], "#1f75fe", "same region recolors blue");
-  eq(T.progress.filled, 1, "still one region filled");
-  ok(!T.isDone(T.current), "not done after one region");
+  ok(T.stroke([{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 100, y: 150 }, { x: 300, y: 150 }]), "a back-and-forth stroke paints");
+  ok(T.coverage > 0, "coverage climbs from scribbling (got " + T.coverage + ")");
+  ok(T.progress.dots >= 1, "at least one dot lights up");
+  const cov1 = T.coverage;
+  T.selectColor(6); // blue, keep going over new ground
+  T.stroke([{ x: 100, y: 250 }, { x: 300, y: 250 }, { x: 100, y: 300 }, { x: 300, y: 300 }]);
+  ok(T.coverage > cov1, "more scribbling covers more of the picture");
+  ok(!T.isDone(T.current), "not done after a couple of strokes");
 });
 
-test("eraser puts a region back to white", () => {
+test("a single tap is just one dab — no more tap-to-fill", () => {
   T.start();
-  const r0 = T.pages[T.current].regions[0];
   T.selectColor(0);
-  T.tapRegion(r0);
-  eq(T.progress.filled, 1, "filled");
+  T.stamp(200, 200);
+  ok(T.coverage > 0, "a dab leaves a little color");
+  ok(T.coverage < 0.05, "but one dab barely moves the page (got " + T.coverage + ")");
+  eq(T.progress.dots, 0, "one dab earns no dots");
+  ok(!T.isDone(T.current), "one tap never finishes a page");
+});
+
+test("paint outside the lines shows but doesn't count", () => {
+  T.start();
+  // Synthetic mask: only the left half of the page is
+  // "inside the lines".
+  T.debug.setMask(T.current, (x) => (x < 200 ? 1 : 0));
+  T.selectColor(0);
+  T.stroke([{ x: 250, y: 100 }, { x: 380, y: 100 }, { x: 250, y: 300 }, { x: 380, y: 300 }]);
+  eq(T.coverage, 0, "scribbling only outside the lines earns nothing");
+  eq(T.progress.dots, 0, "no dots for outside-the-lines paint");
+  // A dense back-and-forth inside the lines: five rows.
+  T.stroke([
+    { x: 20, y: 100 }, { x: 180, y: 100 }, { x: 20, y: 150 }, { x: 180, y: 150 },
+    { x: 20, y: 200 }, { x: 180, y: 200 }, { x: 20, y: 250 }, { x: 180, y: 250 },
+    { x: 20, y: 300 }, { x: 180, y: 300 },
+  ]);
+  ok(T.coverage > 0.2, "scribbling inside the lines counts (got " + T.coverage + ")");
+  ok(T.progress.dots >= 4, "dots light up for inside-the-lines work");
+});
+
+test("eraser scrubs paint back off, dots unlight", () => {
+  T.start();
+  T.selectColor(0);
+  // Color part of the page — well short of half, so the
+  // page doesn't complete under the crayon.
+  const paintPts = [];
+  for (let y = 20; y <= 180; y += 40) {
+    paintPts.push({ x: 20, y: y });
+    paintPts.push({ x: 380, y: y + 20 });
+  }
+  T.stroke(paintPts);
+  const cov = T.coverage;
+  ok(cov > 0.2 && cov < T.target, "page partly colored first (got " + cov + ")");
+  const dots = T.progress.dots;
+  ok(dots >= 5, "dots lit (got " + dots + ")");
   T.selectColor(13); // eraser
   eq(T.selectedName, "eraser", "eraser selected");
-  T.tapRegion(r0);
-  eq(T.fills[T.current][r0], "#ffffff", "region is white again");
-  eq(T.progress.filled, 0, "progress back to zero");
+  // Erase with the same back-and-forth motion.
+  T.stroke(paintPts);
+  ok(T.coverage < cov / 2, "erasing takes most of the color back off (got " + T.coverage + ")");
+  ok(T.progress.dots < dots, "dots unlight as paint comes off");
   ok(!T.isDone(T.current), "erasing never completes a page");
 });
 
-test("a page completes only when every region is filled", () => {
+test("a page completes at about half the picture colored", () => {
   T.start();
-  const regs = T.pages[T.current].regions;
-  T.debug.fillAllBut(regs[regs.length - 1]);
-  eq(T.progress.filled, regs.length - 1, "all but one filled");
-  eq(T.state, "color", "still coloring with one region left");
-  ok(!T.isDone(T.current), "not finished yet");
   T.selectColor(0);
-  T.tapRegion(regs[regs.length - 1]);
-  eq(T.state, "celebrate", "last fill starts the celebration");
+  T.debug.paintToCoverage(0.45);
+  ok(T.coverage >= 0.44 && T.coverage < T.target, "just under half colored (got " + T.coverage + ")");
+  eq(T.state, "color", "still coloring just under half");
+  ok(!T.isDone(T.current), "not finished yet");
+  T.stroke([{ x: 50, y: 350 }, { x: 350, y: 350 }, { x: 50, y: 380 }, { x: 350, y: 380 }]);
+  eq(T.state, "celebrate", "crossing half the picture starts the celebration");
   ok(T.isDone(T.current), "page finished");
-  eq(T.progress.filled, regs.length, "every region filled");
+  approx(T.coverage, 0.5, 0.08, "finished at about half colored");
 });
 
 test("celebration rolls to a random unfinished picture", () => {
@@ -166,21 +221,20 @@ test("celebration rolls to a random unfinished picture", () => {
   eq(T.unfinishedCount, 5, "five left");
 });
 
-test("NEW PICTURE re-rolls to a random unfinished picture, keeps work", () => {
+test("NEW PICTURE re-rolls to a random unfinished picture, keeps the scribbles", () => {
   T.start();
   const first = T.current;
   T.selectColor(0);
-  T.tapRegion(T.pages[first].regions[0]);
-  T.tapRegion(T.pages[first].regions[1]);
-  eq(T.progress.filled, 2, "two regions colored on the first picture");
+  T.stroke([{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 100, y: 150 }, { x: 300, y: 150 }]);
+  const cov = T.coverage;
+  ok(cov > 0, "some color on the first picture");
   ok(T.newPicture(), "NEW PICTURE swaps");
   ok(T.current !== first, "a different picture");
   ok(!T.isDone(T.current), "swapped to an unfinished picture");
   eq(T.state, "color", "still coloring");
-  // Cycle back: the work is still there.
+  // Cycle back: the scribbles are still there.
   T.openPage(first);
-  eq(T.filledCount(first), 2, "skipping never erases work");
-  eq(T.fills[first][T.pages[first].regions[0]], "#ee204d", "first region still red");
+  approx(T.coverageOf(first), cov, 0.001, "skipping never erases work");
 });
 
 test("NEW PICTURE does nothing when only the current picture is left", () => {
@@ -208,10 +262,10 @@ test("thumbnail gallery jumps to any picture, finished or not", () => {
   eq(T.state, "color", "coloring it again is fine");
   T.openPage(first);
   eq(T.current, first, "jumped to another picture");
-  // Finishing an already-finished picture must not re-celebrate.
-  T.debug.fillAll();
+  // Scribbling more on an already-finished picture must
+  // not re-celebrate.
   T.selectColor(0);
-  T.tapRegion(T.pages[first].regions[0]);
+  T.stroke([{ x: 100, y: 100 }, { x: 300, y: 100 }]);
   eq(T.state, "color", "no second celebration for a finished page");
 });
 
@@ -233,7 +287,7 @@ test("coloring all 6 reaches the finale, then PLAY AGAIN resets", () => {
   T.playAgain();
   eq(T.state, "color", "playing again");
   eq(T.done.length, 0, "no finished pictures after PLAY AGAIN");
-  ok(T.fills.every((f) => Object.keys(f).length === 0), "every page blank again");
+  ok(T.coverages.every((c) => c === 0), "every page blank again");
   ok(isPerm(T.order), "PLAY AGAIN re-shuffles");
   eq(T.current, T.order[0], "a fresh random first picture");
 });

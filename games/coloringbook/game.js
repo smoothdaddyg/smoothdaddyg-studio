@@ -2,9 +2,7 @@
    COLORING BOOK — SmoothDaddyG, game #23
    ------------------------------------------------------------
    Danny's 2026-11-08 call: a coloring book — pictures of
-   cool things to color in, a bunch of colors to pick from;
-   pick a color, tap regions to fill them, go back and
-   forth filling in colors.
+   cool things to color in, a bunch of colors to pick from.
 
    Then his daughter's real photos shaped it further:
    her well-used Crayola box, and her cat activity book
@@ -14,14 +12,34 @@
    friendly CAT joins the pictures, drawn in her book's
    style: big face, pointy ears, fluffy chest, curled tail.
 
-   6 pages: Unicorn, Rocket, Spaceship, Satellite, Flower,
-   Cat. Each is inline SVG line art: bold black outlines,
-   big tappable regions, starting white. Tap a crayon,
-   tap a region — it fills with a pop and a sparkle.
-   Dots under the page show progress (no numbers, no
-   words). Fill every region and the page throws a
-   celebration, then the game rolls to a random picture
-   she hasn't finished yet.
+   Danny's 2026-11-10 call: "change the color book game
+   to work more like a real crayon. U have it where u
+   just tap and the color shows up. That's not fun. In
+   the real word we move our hands back and forth and
+   color the area. Doesn't have to be in the lines
+   either. That's the beauty of coloring. U try to stay
+   in the lines."
+
+   So v2 is REAL CRAYON: pick a crayon, then SCRIBBLE
+   back and forth across the picture. Each stroke lays
+   down waxy, grainy crayon — jittered dabs in slightly
+   varied shades, so it looks like wax on paper, not a
+   flat fill. The paint lives on a canvas UNDER the
+   line art, so color spills OUTSIDE the lines exactly
+   like the real thing — and trying to stay inside them
+   is the game: a page is finished when about HALF the
+   picture's line-art area is colored in (paint outside
+   the lines doesn't count toward it). 10 dots under the
+   page light up as you color, each one keeping the
+   crayon color that earned it. The eraser scrubs paint
+   back off, same back-and-forth motion.
+
+   6 pages: Unicorn, Rocket, Spaceship, Satellite,
+   Flower, Cat. The line art is the same SVG paths as
+   v1 — they now double as the mask that decides what
+   counts as "inside the lines" (rasterized once at
+   boot into a 50x50 grid; if that ever fails, any
+   paint counts and the page still finishes).
 
    RANDOM every playthrough (his call): fresh load and
    PLAY AGAIN shuffle the pictures — no two playthroughs
@@ -29,19 +47,23 @@
    The NEW PICTURE button (shuffle icon, in the deck)
    re-rolls the current picture to a random different
    unfinished one, as often as she likes — skipping never
-   erases work, every picture keeps its colors until she
-   comes back to it. The thumbnail gallery (grid button
-   in the deck) still lets her jump to any picture.
-   Color all 6 for the grand finale gallery + PLAY AGAIN.
+   erases work, every picture keeps its scribbles until
+   she comes back to it. The thumbnail gallery (grid
+   button in the deck) still lets her jump to any
+   picture, and now each thumbnail shows the real
+   coloring on that page. Color all 6 for the grand
+   finale gallery + PLAY AGAIN.
 
    NO connect-the-dots or matching here — those are
    separate future games. This one stays a pure
    coloring book.
 
-   ONE OBVIOUS INTERACTION: pick a crayon, tap a region.
-   Sound always on, NO volume control ever. Original
-   music-box chiptune loop (its own melody, bass 0.2,
-   harmony voice). 84px back button. No reading required
+   ONE OBVIOUS INTERACTION: pick a crayon, scribble.
+   Sound always on, NO volume control ever. A soft
+   crayon scratch while you scribble, pops that climb
+   in pitch as the dots light up. Original music-box
+   chiptune loop (its own melody, bass 0.2, harmony
+   voice). 84px back button. No reading required
    anywhere except PLAY AGAIN. No ads, no IAP. iPad-first.
    ============================================================ */
 "use strict";
@@ -49,8 +71,8 @@
   /* ---------------- the pages: SVG line art ----------------
      Each region is one <path> (multiple subpaths allowed),
      drawn in painter's order (later = on top). Details are
-     stroke-only line work that never blocks a tap
-     (pointer-events none). All coordinates in a 400x400 box. */
+     stroke-only line work. All coordinates in a 400x400 box.
+     The same paths build the "inside the lines" mask. */
   const STROKE = "#16161f";
   const PAGES = [
     { name: "unicorn", regions: [
@@ -132,7 +154,7 @@
      Classic crayon colors, like the real box: red, pink,
      orange, yellow, light green, green, blue, dark blue,
      purple, brown, peach, white, black — plus a pink
-     eraser that puts a region back to white. */
+     eraser that scrubs paint back off. */
   const PALETTE = [
     { name: "red", hex: "#ee204d" },
     { name: "pink", hex: "#ff7eb9" },
@@ -156,14 +178,18 @@
   function tone(f, d, o) { try { if (SFX) SFX.tone(f, d, o || {}); } catch (e) {} }
   function noiseS(d, o) { try { if (SFX) SFX.noise(d, o || {}); } catch (e) {} }
   function arp(ns, s, t, v) { try { if (SFX) SFX.arp(ns, s, t, v); } catch (e) {} }
-  // Pop pitch climbs as the page fills — the sound itself
-  // tells you you're getting somewhere.
-  function sndPop(filled) {
-    const f = 520 + Math.min(filled, 12) * 32;
+  // The crayon scratch: a short soft bandpass noise burst,
+  // throttled while the hand moves — wax on paper.
+  function sndScribble(erase) {
+    noiseS(0.05, { filter: "bandpass", freq: erase ? 900 : 1400 + Math.random() * 1000, vol: 0.03 });
+  }
+  // Pop pitch climbs as the dots light up — the sound
+  // itself tells you you're getting somewhere.
+  function sndPop(dots) {
+    const f = 520 + Math.min(dots, 10) * 40;
     tone(f, 0.09, { type: "square", vol: 0.09, slideTo: f * 1.5 });
     noiseS(0.05, { filter: "highpass", freq: 5000, vol: 0.04 });
   }
-  function sndErase() { tone(300, 0.1, { type: "triangle", vol: 0.08, slideTo: 180 }); }
   function sndFanfare() { arp([523, 659, 784, 1046, 1318], 0.1, "square", 0.10); noiseS(0.5, { filter: "highpass", freq: 3000, vol: 0.04, when: 0.2 }); }
   function sndFinale() { arp([523, 659, 784, 1046, 1318, 1568, 2093, 2637], 0.12, "square", 0.11); noiseS(0.9, { filter: "highpass", freq: 3000, vol: 0.05, when: 0.3 }); }
 
@@ -205,14 +231,79 @@
     if (!musicStarted && MUSIC) { try { MUSIC.start(); } catch (e) {} musicStarted = true; }
   }
 
+  /* ---------------- the crayon engine ----------------
+     BOX: the 400x400 drawing box. Paint lives on one
+     offscreen canvas per page (OFF x OFF px) and is
+     blitted onto the visible #paint canvas. Progress is
+     tracked on a GRID x GRID boolean grid: a cell counts
+     when it is painted AND inside the line art (the
+     mask). Paint outside the lines shows up on the page
+     — it just doesn't move the dots. */
+  const BOX = 400, GRID = 50, CELL = BOX / GRID, OFF = 800, SCALE = OFF / BOX;
+  const BRUSH = 13;        // crayon radius, box units
+  const ERASER_BRUSH = 18; // eraser radius, box units
+  const TARGET = 0.5;       // half the picture colored = done
+  const DOTS_N = 10;
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [ (n >> 16) & 255, (n >> 8) & 255, n & 255 ];
+  }
+  function shadeStr(rgb, f) {
+    const c = function (v) { return Math.max(0, Math.min(255, Math.round(v * f))); };
+    return "rgb(" + c(rgb[0]) + "," + c(rgb[1]) + "," + c(rgb[2]) + ")";
+  }
+
+  /* The "inside the lines" mask: rasterize the page's
+     region paths onto a GRID x GRID canvas once at boot.
+     Any failure (no Path2D, no pixels) falls back to
+     "everything counts" so the page can still finish. */
+  function buildMask(pageIdx) {
+    const grid = new Uint8Array(GRID * GRID);
+    try {
+      if (typeof Path2D !== "function") throw new Error("no Path2D");
+      const mc = document.createElement("canvas");
+      mc.width = GRID; mc.height = GRID;
+      const mctx = mc.getContext("2d");
+      if (!mctx) throw new Error("no ctx");
+      mctx.scale(GRID / BOX, GRID / BOX);
+      mctx.fillStyle = "#fff";
+      for (const r of PAGES[pageIdx].regions) {
+        mctx.save();
+        if (r.tr) {
+          const m = /rotate\((-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\)/.exec(r.tr);
+          if (m) {
+            mctx.translate(+m[2], +m[3]);
+            mctx.rotate((+m[1]) * Math.PI / 180);
+            mctx.translate(-m[2], -m[3]);
+          }
+        }
+        mctx.fill(new Path2D(r.d));
+        mctx.restore();
+      }
+      const img = mctx.getImageData(0, 0, GRID, GRID);
+      if (!img || !img.data) throw new Error("no pixels");
+      for (let i = 0; i < GRID * GRID; i++) grid[i] = img.data[i * 4 + 3] > 0 ? 1 : 0;
+    } catch (e) {
+      grid.fill(1);
+    }
+    let total = 0;
+    for (let i = 0; i < GRID * GRID; i++) total += grid[i];
+    if (!total) grid.fill(1), total = GRID * GRID;
+    return { grid: grid, total: total };
+  }
+  const MASKS = PAGES.map(function (_, i) { return buildMask(i); });
+
   /* ---------------- dom ---------------- */
   function el(id) { return document.getElementById(id); }
-  const picEl = el("pic"), dotsEl = el("dots"), paletteEl = el("palette");
+  const paperEl = el("paper"), picEl = el("pic"), dotsEl = el("dots"), paletteEl = el("palette");
+  const paintEl = el("paint"), cursorEl = el("cursor");
   const newBtn = el("newBtn"), galleryBtn = el("galleryBtn");
   const overlay = el("galleryOverlay"), thumbsEl = el("thumbs");
   const playAgainBtn = el("playAgainBtn"), galleryCloseBtn = el("galleryCloseBtn");
   const fx = el("fx");
   const fctx = fx ? fx.getContext("2d") : null;
+  const pctx = paintEl ? paintEl.getContext("2d") : null;
 
   /* ---------------- state ---------------- */
   const CELEB_T = 2.0, FINALE_T = 2.5;
@@ -220,11 +311,14 @@
   let order = []; // shuffled permutation of page indices (gallery order)
   let current = 0; // page index being colored
   let done = {}; // page index -> true once finished
-  let fills = []; // per page: { regionId: hex }
   let selected = 0; // palette index
   let celebT = 0, finaleT = 0, finaleShown = false, galleryMode = "picker";
   let parts = [];
   let playedLogged = false;
+  // Per-page paint: a boolean grid, a painted-mask-cell count,
+  // dots lit + the color that earned each dot, and the
+  // offscreen canvas that holds the real wax.
+  let grids = [], painted = [], lit = [], dotCols = [], offs = [], offCtxs = [];
   const rnd = (a, b) => a + Math.random() * (b - a);
   function shuffle(arr) {
     const a = arr.slice();
@@ -244,40 +338,144 @@
     if (!cands.length) return null;
     return cands[Math.floor(Math.random() * cands.length)];
   }
-  function filledCount(pageIdx) {
-    const f = fills[pageIdx] || {};
-    return PAGES[pageIdx].regions.filter((r) => f[r.id] && f[r.id] !== WHITE).length;
+  function coverage(pageIdx) {
+    const total = MASKS[pageIdx].total;
+    return total ? painted[pageIdx] / total : 0;
   }
   function isDone(pageIdx) { return !!done[pageIdx]; }
+  function recount(pageIdx) {
+    const m = MASKS[pageIdx].grid, g = grids[pageIdx];
+    let n = 0;
+    for (let i = 0; i < GRID * GRID; i++) if (g[i] && m[i]) n++;
+    painted[pageIdx] = n;
+    lit[pageIdx] = Math.min(DOTS_N, Math.floor(coverage(pageIdx) / TARGET * DOTS_N));
+  }
+
+  /* ---------------- painting ----------------
+     One stamp: mark the grid disc (what counts) and lay
+     down waxy dabs on the offscreen canvas (what she
+     sees). The canvas dabs are jittered and shaded so a
+     stroke reads as crayon wax, not a flat tube. */
+  function stampAt(pageIdx, x, y, erase) {
+    if (state !== "color") return;
+    const r = erase ? ERASER_BRUSH : BRUSH;
+    const g = grids[pageIdx], m = MASKS[pageIdx].grid;
+    const cx0 = Math.max(0, Math.floor((x - r) / CELL)), cx1 = Math.min(GRID - 1, Math.floor((x + r) / CELL));
+    const cy0 = Math.max(0, Math.floor((y - r) / CELL)), cy1 = Math.min(GRID - 1, Math.floor((y + r) / CELL));
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const dx = (cx + 0.5) * CELL - x, dy = (cy + 0.5) * CELL - y;
+        if (dx * dx + dy * dy > r * r) continue;
+        const idx = cy * GRID + cx;
+        if (erase) {
+          if (g[idx]) { g[idx] = 0; if (m[idx]) painted[pageIdx]--; }
+        } else {
+          if (!g[idx]) { g[idx] = 1; if (m[idx]) painted[pageIdx]++; }
+        }
+      }
+    }
+    const octx = offCtxs[pageIdx];
+    if (octx) {
+      const px = x * SCALE, py = y * SCALE;
+      if (erase) {
+        octx.save();
+        octx.globalCompositeOperation = "destination-out";
+        octx.globalAlpha = 1;
+        octx.beginPath();
+        octx.arc(px, py, ERASER_BRUSH * SCALE, 0, Math.PI * 2);
+        octx.fill();
+        octx.restore();
+      } else {
+        const rgb = hexToRgb(PALETTE[selected].hex);
+        for (let k = 0; k < 3; k++) {
+          const jx = px + rnd(-7, 7), jy = py + rnd(-7, 7);
+          octx.globalAlpha = rnd(0.5, 0.85);
+          octx.fillStyle = shadeStr(rgb, [0.88, 1.0, 1.12][k]);
+          octx.beginPath();
+          octx.arc(jx, jy, rnd(9, 14), 0, Math.PI * 2);
+          octx.fill();
+        }
+        octx.globalAlpha = 1;
+      }
+    }
+  }
+  function strokePoint(pageIdx, x, y) {
+    if (state !== "color") return false;
+    stampAt(pageIdx, x, y, !!PALETTE[selected].eraser);
+    blit();
+    afterStroke();
+    return true;
+  }
+  function strokeLine(pageIdx, x0, y0, x1, y1) {
+    if (state !== "color") return false;
+    const erase = !!PALETTE[selected].eraser;
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / 4));
+    for (let i = 0; i <= steps; i++) {
+      if (state !== "color") break;
+      stampAt(pageIdx, x0 + (x1 - x0) * (i / steps), y0 + (y1 - y0) * (i / steps), erase);
+    }
+    blit();
+    afterStroke();
+    return true;
+  }
+  function blit() {
+    if (!pctx || !offs[current]) return;
+    try {
+      pctx.clearRect(0, 0, OFF, OFF);
+      pctx.drawImage(offs[current], 0, 0);
+    } catch (e) {}
+  }
+  // Dots light up as the picture fills; each one keeps
+  // the crayon color that earned it. Cross the halfway
+  // mark and the page is done.
+  function afterStroke() {
+    const cov = coverage(current);
+    const want = Math.min(DOTS_N, Math.floor(cov / TARGET * DOTS_N));
+    if (want > lit[current]) {
+      for (let k = lit[current]; k < want; k++) dotCols[current][k] = PALETTE[selected].hex;
+      lit[current] = want;
+      sndPop(want);
+      renderDots();
+    } else if (want < lit[current]) {
+      lit[current] = want;
+      renderDots();
+    }
+    if (!done[current] && cov >= TARGET) finishPage();
+  }
 
   /* ---------------- rendering ---------------- */
   function svgForPage(pageIdx) {
-    const p = PAGES[pageIdx], f = fills[pageIdx] || {};
+    const p = PAGES[pageIdx];
     let s = '<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">';
     for (const r of p.regions) {
-      const fill = f[r.id] || WHITE;
-      s += '<path data-region="' + r.id + '" d="' + r.d + '"' +
+      s += '<path d="' + r.d + '"' +
         (r.tr ? ' transform="' + r.tr + '"' : '') +
-        ' fill="' + fill + '" stroke="' + STROKE + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>';
+        ' fill="none" stroke="' + STROKE + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>';
     }
     s += '<g pointer-events="none" fill="none" stroke="' + STROKE + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">' + p.details + "</g>";
     s += "</svg>";
     return s;
   }
+  function paintDataURL(pageIdx) {
+    try {
+      const c = offs[pageIdx];
+      return (c && typeof c.toDataURL === "function") ? c.toDataURL() : null;
+    } catch (e) { return null; }
+  }
   function renderPage() {
     if (picEl) picEl.innerHTML = svgForPage(current);
+    blit();
     renderDots();
     updateNewBtn();
   }
   function renderDots() {
     if (!dotsEl) return;
-    const total = PAGES[current].regions.length, n = filledCount(current);
     let h = "";
-    for (let i = 0; i < total; i++) {
-      const r = PAGES[current].regions[i];
-      const col = (fills[current] || {})[r.id];
-      const on = col && col !== WHITE;
-      h += '<span class="dot' + (on ? " on" : "") + '"' + (on ? ' style="background:' + col + '"' : "") + "></span>";
+    for (let i = 0; i < DOTS_N; i++) {
+      const on = i < lit[current];
+      const col = dotCols[current][i];
+      h += '<span class="dot' + (on ? " on" : "") + '"' + (on && col ? ' style="background:' + col + '"' : "") + "></span>";
     }
     dotsEl.innerHTML = h;
   }
@@ -312,7 +510,8 @@
     for (const i of order) {
       const b = document.createElement("button");
       b.className = "thumb";
-      b.innerHTML = svgForPage(i) + (done[i] ? '<span class="star">' + STAR_SVG + "</span>" : "");
+      const img = paintDataURL(i);
+      b.innerHTML = (img ? '<img class="thumbpaint" src="' + img + '" alt="">' : "") + svgForPage(i) + (done[i] ? '<span class="star">' + STAR_SVG + "</span>" : "");
       b.setAttribute("aria-label", PAGES[i].name + (done[i] ? ", finished" : ""));
       (function (idx) {
         b.addEventListener("click", function () { openPage(idx); });
@@ -341,13 +540,23 @@
 
   /* ---------------- game flow ---------------- */
   function newGame() {
-    fills = PAGES.map(() => ({}));
     done = {};
     order = shuffle(PAGES.map((_, i) => i));
     current = order[0];
     selected = 0;
     state = "color";
     celebT = 0; finaleT = 0; finaleShown = false;
+    grids = []; painted = []; lit = []; dotCols = []; offs = []; offCtxs = [];
+    for (let i = 0; i < PAGES.length; i++) {
+      grids.push(new Uint8Array(GRID * GRID));
+      painted.push(0);
+      lit.push(0);
+      dotCols.push(new Array(DOTS_N).fill(null));
+      const c = document.createElement("canvas");
+      c.width = OFF; c.height = OFF;
+      offs.push(c);
+      offCtxs.push(c.getContext ? c.getContext("2d") : null);
+    }
     if (overlay) overlay.hidden = true;
     renderPalette();
     renderPage();
@@ -359,26 +568,6 @@
   function selectColor(i) {
     selected = i;
     renderPalette();
-  }
-  function fillRegion(id, x, y) {
-    if (state !== "color") return false;
-    const p = PAGES[current];
-    if (!p.regions.some((r) => r.id === id)) return false;
-    const c = PALETTE[selected];
-    const was = (fills[current] || {})[id];
-    fills[current][id] = c.hex;
-    const n = filledCount(current);
-    if (c.eraser) { sndErase(); }
-    else {
-      sndPop(n);
-      if (x != null && y != null) {
-        burst(x, y, c.hex, 10, 2.5);
-        burst(x, y, "#ffffff", 6, 2);
-      }
-    }
-    renderPage();
-    if (was !== c.hex && !done[current] && n === p.regions.length) finishPage();
-    return true;
   }
   function finishPage() {
     done[current] = true;
@@ -429,20 +618,72 @@
     newGame();
   }
 
-  /* ---------------- input ---------------- */
-  function onPicDown(e) {
+  /* ---------------- input: scribble, don't tap ----------------
+     Pointer down on the paper starts a stroke; moving the
+     hand lays down crayon all along the path; lifting
+     ends it. One finger at a time. The line art sits on
+     top with pointer-events off, so the hand colors
+     straight through it — inside the lines or out. */
+  let stroking = false, activePointer = null, lastX = 0, lastY = 0, lastSnd = 0;
+  function toBox(e) {
+    const r = paperEl ? paperEl.getBoundingClientRect() : { left: 0, top: 0, width: BOX, height: BOX };
+    return {
+      x: (e.clientX - r.left) / r.width * BOX,
+      y: (e.clientY - r.top) / r.height * BOX,
+      rect: r,
+    };
+  }
+  function moveCursor(p, show) {
+    if (!cursorEl) return;
+    if (!show) { cursorEl.style.display = "none"; return; }
+    const r = p.rect, d = ((PALETTE[selected].eraser ? ERASER_BRUSH : BRUSH) * 2 / BOX) * r.width;
+    cursorEl.style.display = "block";
+    cursorEl.style.width = d + "px";
+    cursorEl.style.height = d + "px";
+    cursorEl.style.left = (p.x / BOX * 100) + "%";
+    cursorEl.style.top = (p.y / BOX * 100) + "%";
+    cursorEl.style.borderColor = PALETTE[selected].eraser ? "#ff9fb0" : PALETTE[selected].hex;
+  }
+  function onPaperDown(e) {
+    if (state !== "color") return;
     e.preventDefault();
     startMusic();
-    const t = e.target;
-    const region = t && t.closest ? t.closest("[data-region]") : null;
-    if (!region) return;
-    const id = region.getAttribute("data-region");
-    const r = fx ? fx.getBoundingClientRect() : { left: 0, top: 0 };
-    fillRegion(id, e.clientX - r.left, e.clientY - r.top);
+    const p = toBox(e);
+    stroking = true; activePointer = e.pointerId;
+    lastX = p.x; lastY = p.y;
+    if (paperEl && paperEl.setPointerCapture) {
+      try { paperEl.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    strokePoint(current, p.x, p.y);
+    moveCursor(p, true);
   }
-  if (picEl) {
-    picEl.addEventListener("pointerdown", onPicDown);
-    picEl.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  function onPaperMove(e) {
+    if (!stroking || e.pointerId !== activePointer) {
+      if (e.pointerType === "mouse" && state === "color") moveCursor(toBox(e), true);
+      return;
+    }
+    e.preventDefault();
+    const p = toBox(e);
+    strokeLine(current, lastX, lastY, p.x, p.y);
+    lastX = p.x; lastY = p.y;
+    moveCursor(p, true);
+    const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : 0;
+    if (now - lastSnd > 70) { lastSnd = now; sndScribble(!!PALETTE[selected].eraser); }
+  }
+  function onPaperUp(e) {
+    if (e.pointerId !== activePointer) return;
+    stroking = false; activePointer = null;
+    moveCursor(null, false);
+  }
+  if (paperEl) {
+    paperEl.addEventListener("pointerdown", onPaperDown);
+    paperEl.addEventListener("pointermove", onPaperMove);
+    paperEl.addEventListener("pointerup", onPaperUp);
+    paperEl.addEventListener("pointercancel", onPaperUp);
+    paperEl.addEventListener("pointerleave", function (e) {
+      if (!stroking) moveCursor(null, false);
+    });
+    paperEl.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   }
   if (newBtn) newBtn.addEventListener("click", function () { startMusic(); newPicture(); });
   if (galleryBtn) galleryBtn.addEventListener("click", function () { startMusic(); openGallery("picker"); });
@@ -528,24 +769,32 @@
     get current() { return current; },
     get order() { return order.slice(); },
     get done() { return Object.keys(done).map(Number); },
-    get fills() { return fills.map((f) => Object.assign({}, f)); },
     get selected() { return selected; },
     get selectedColor() { return PALETTE[selected].hex; },
     get selectedName() { return PALETTE[selected].name; },
     get palette() { return PALETTE.map((c) => ({ name: c.name, hex: c.hex, eraser: !!c.eraser })); },
     get pages() { return PAGES.map((p) => ({ name: p.name, regions: p.regions.map((r) => r.id) })); },
-    get progress() { return { filled: filledCount(current), total: PAGES[current].regions.length }; },
+    get coverage() { return coverage(current); },
+    get coverages() { return PAGES.map((_, i) => coverage(i)); },
+    get progress() { return { coverage: coverage(current), dots: lit[current], total: DOTS_N }; },
     get unfinishedCount() { return unfinished().length; },
     get galleryShown() { return overlay ? !overlay.hidden : false; },
     get galleryMode() { return galleryMode; },
     get music() { return MUSIC_CFG; },
+    get gridSize() { return GRID; },
+    get target() { return TARGET; },
     get cfg() { return { CELEB_T: CELEB_T, FINALE_T: FINALE_T, pageCount: PAGES.length }; },
-    filledCount: function (i) { return filledCount(i); },
+    coverageOf: function (i) { return coverage(i); },
     isDone: function (i) { return isDone(i); },
     start: function () { newGame(); },
     selectColor: function (i) { selectColor(i); },
-    fillRegion: function (id) { return fillRegion(id); },
-    tapRegion: function (id) { return fillRegion(id); },
+    stamp: function (x, y) { return strokePoint(current, x, y); },
+    stroke: function (pts) {
+      if (!pts || pts.length < 1 || state !== "color") return false;
+      if (pts.length === 1) return strokePoint(current, pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) strokeLine(current, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
+      return true;
+    },
     openPage: function (i) { openPage(i); },
     newPicture: function () { return newPicture(); },
     openGallery: function (m) { openGallery(m); },
@@ -553,17 +802,30 @@
     playAgain: function () { playAgain(); },
     step: function (dt) { tick(dt || 0.016); },
     debug: {
-      fillAllBut: function (skipId) {
-        const p = PAGES[current];
-        for (const r of p.regions) {
-          if (r.id !== skipId) fills[current][r.id] = "#ff0000";
+      maskOf: function (i) { return Array.from(MASKS[i].grid); },
+      maskTotal: function (i) { return MASKS[i].total; },
+      setMask: function (i, fn) {
+        for (let cy = 0; cy < GRID; cy++) {
+          for (let cx = 0; cx < GRID; cx++) {
+            MASKS[i].grid[cy * GRID + cx] = fn((cx + 0.5) * CELL, (cy + 0.5) * CELL) ? 1 : 0;
+          }
         }
-        renderPage();
+        let total = 0;
+        for (let k = 0; k < GRID * GRID; k++) total += MASKS[i].grid[k];
+        MASKS[i].total = total || 1;
+        recount(i);
+        renderDots();
       },
-      fillAll: function () {
-        for (const r of PAGES[current].regions) fills[current][r.id] = "#ff0000";
-        renderPage();
+      paintToCoverage: function (frac) {
+        for (let y = 4; y < BOX && state === "color"; y += 8) {
+          for (let x = 4; x < BOX && state === "color"; x += 8) {
+            stampAt(current, x, y, false);
+            if (coverage(current) >= frac) { blit(); afterStroke(); return; }
+          }
+        }
+        blit(); afterStroke();
       },
+      paintToComplete: function () { this.paintToCoverage(TARGET); },
       finishCurrent: function () { finishPage(); },
       forceState: function (s) { state = s; },
     },
