@@ -27,12 +27,17 @@
    flat fill. The paint lives on a canvas UNDER the
    line art, so color spills OUTSIDE the lines exactly
    like the real thing — and trying to stay inside them
-   is the game: a page is finished when about HALF the
-   picture's line-art area is colored in (paint outside
-   the lines doesn't count toward it). 10 dots under the
-   page light up as you color, each one keeping the
-   crayon color that earned it. The eraser scrubs paint
-   back off, same back-and-forth motion.
+   is the game: the 10 dots under the page light up as
+   the line-art area fills (paint outside the lines
+   doesn't count toward it), each one keeping the crayon
+   color that earned it, all 10 lit at about half the
+   picture colored. The eraser scrubs paint back off,
+   same back-and-forth motion. v3 (his 2026-11-10
+   playtest): the dots are only progress now — the game
+   NEVER finishes a page on its own. A big green SAVE
+   button appears once she's put any color down, and SHE
+   taps it when SHE thinks she's done; only then does the
+   page celebrate and roll on.
 
    6 pages: Unicorn, Rocket, Spaceship, Satellite,
    Flower, Cat. The line art is the same SVG paths as
@@ -48,11 +53,31 @@
    re-rolls the current picture to a random different
    unfinished one, as often as she likes — skipping never
    erases work, every picture keeps its scribbles until
-   she comes back to it. The thumbnail gallery (grid
+   she comes back to it. If there's nowhere left to
+   re-roll to, it opens the thumbnail gallery instead of
+   silently doing nothing, and it works even while a
+   celebration is playing. The thumbnail gallery (grid
    button in the deck) still lets her jump to any
    picture, and now each thumbnail shows the real
    coloring on that page. Color all 6 for the grand
    finale gallery + PLAY AGAIN.
+
+   Danny's 2026-11-10 playtest (v3): three fixes. (1) The
+   site-wide 84px back button overlaid the paper's top-left
+   corner on his iPhone, hiding the line art there — in
+   portrait the stage now starts 104px down and the paper
+   is capped by viewport height, so the whole page stays
+   visible and tappable. (2) NEW PICTURE never silently
+   does nothing (see above). (3) The game NO LONGER
+   decides she's done: reaching half the picture only
+   lights all 10 dots — nothing dings, nothing advances.
+   A big green SAVE button appears under the dots as soon
+   as she's put any color down; SHE taps it when SHE
+   thinks she's done, and only then does the page
+   celebrate and roll on. (Judgment call, his to flip:
+   SAVE is offered after any paint at all, not gated to
+   the half-picture mark — "she decides" means she
+   decides, even at a quarter-colored page.)
 
    NO connect-the-dots or matching here — those are
    separate future games. This one stays a pure
@@ -299,6 +324,7 @@
   const paperEl = el("paper"), picEl = el("pic"), dotsEl = el("dots"), paletteEl = el("palette");
   const paintEl = el("paint"), cursorEl = el("cursor");
   const newBtn = el("newBtn"), galleryBtn = el("galleryBtn");
+  const saveBtn = el("saveBtn");
   const overlay = el("galleryOverlay"), thumbsEl = el("thumbs");
   const playAgainBtn = el("playAgainBtn"), galleryCloseBtn = el("galleryCloseBtn");
   const fx = el("fx");
@@ -313,6 +339,7 @@
   let done = {}; // page index -> true once finished
   let selected = 0; // palette index
   let celebT = 0, finaleT = 0, finaleShown = false, galleryMode = "picker";
+  let saveShown = false; // the SAVE button is showing and tappable
   let parts = [];
   let playedLogged = false;
   // Per-page paint: a boolean grid, a painted-mask-cell count,
@@ -349,6 +376,7 @@
     for (let i = 0; i < GRID * GRID; i++) if (g[i] && m[i]) n++;
     painted[pageIdx] = n;
     lit[pageIdx] = Math.min(DOTS_N, Math.floor(coverage(pageIdx) / TARGET * DOTS_N));
+    if (pageIdx === current) updateSaveBtn();
   }
 
   /* ---------------- painting ----------------
@@ -427,8 +455,10 @@
     } catch (e) {}
   }
   // Dots light up as the picture fills; each one keeps
-  // the crayon color that earned it. Cross the halfway
-  // mark and the page is done.
+  // the crayon color that earned it. Crossing the halfway
+  // mark lights the last dot — and NOTHING else happens.
+  // The game never decides she's done: only her SAVE tap
+  // finishes a page (see savePicture below).
   function afterStroke() {
     const cov = coverage(current);
     const want = Math.min(DOTS_N, Math.floor(cov / TARGET * DOTS_N));
@@ -441,7 +471,19 @@
       lit[current] = want;
       renderDots();
     }
-    if (!done[current] && cov >= TARGET) finishPage();
+    updateSaveBtn();
+  }
+  // SAVE shows as soon as she's put any color down on an
+  // unfinished page — and hides again if she erases it
+  // all, or once the page is finished. The row reserves
+  // its space either way, so the paper never jumps.
+  function updateSaveBtn() {
+    const show = state === "color" && !done[current] && coverage(current) > 0;
+    saveShown = show;
+    if (!saveBtn) return;
+    if (show) saveBtn.classList.add("show");
+    else saveBtn.classList.remove("show");
+    saveBtn.disabled = !show;
   }
 
   /* ---------------- rendering ---------------- */
@@ -468,6 +510,7 @@
     blit();
     renderDots();
     updateNewBtn();
+    updateSaveBtn();
   }
   function renderDots() {
     if (!dotsEl) return;
@@ -573,8 +616,20 @@
     done[current] = true;
     state = "celebrate";
     celebT = 0;
+    updateSaveBtn();
     sndFanfare();
     burst(window.innerWidth / 2, window.innerHeight * 0.35, "#ffe14d", 30, 4);
+  }
+  // SAVE: the only way a page finishes. She taps it when
+  // SHE thinks she's done — any amount of color counts.
+  // The celebration + roll to the next picture only happen
+  // because she asked for them.
+  function savePicture() {
+    if (state !== "color") return false;
+    if (done[current]) return false;
+    if (coverage(current) <= 0) return false;
+    finishPage();
+    return true;
   }
   function advance() {
     if (Object.keys(done).length >= PAGES.length) { startFinale(); return; }
@@ -585,9 +640,26 @@
     renderPage();
   }
   function newPicture() {
+    if (state === "finale") return false;
+    if (state === "celebrate") {
+      // Tapping NEW PICTURE mid-celebration jumps right
+      // away instead of making her wait out the 2s beat —
+      // unless this was the last picture, in which case
+      // the celebration rolls to the finale as planned.
+      const cands = unfinished().filter((i) => i !== current);
+      if (!cands.length) return false;
+      state = "color";
+      celebT = 0;
+    }
     if (state !== "color") return false;
     const next = randomUnfinished(current);
-    if (next == null) return false;
+    if (next == null) {
+      // Nowhere left to re-roll to: open the gallery
+      // instead of silently doing nothing — she can jump
+      // to any picture, finished or not.
+      openGallery("picker");
+      return true;
+    }
     current = next;
     renderPage();
     return true;
@@ -686,6 +758,7 @@
     paperEl.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   }
   if (newBtn) newBtn.addEventListener("click", function () { startMusic(); newPicture(); });
+  if (saveBtn) saveBtn.addEventListener("click", function () { startMusic(); savePicture(); });
   if (galleryBtn) galleryBtn.addEventListener("click", function () { startMusic(); openGallery("picker"); });
   if (galleryCloseBtn) galleryCloseBtn.addEventListener("click", function () { closeGallery(); });
   if (playAgainBtn) playAgainBtn.addEventListener("click", function () { startMusic(); playAgain(); });
@@ -778,6 +851,8 @@
     get coverages() { return PAGES.map((_, i) => coverage(i)); },
     get progress() { return { coverage: coverage(current), dots: lit[current], total: DOTS_N }; },
     get unfinishedCount() { return unfinished().length; },
+    get saveReady() { return saveShown; },
+    save: function () { return savePicture(); },
     get galleryShown() { return overlay ? !overlay.hidden : false; },
     get galleryMode() { return galleryMode; },
     get music() { return MUSIC_CFG; },
