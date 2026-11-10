@@ -1,4 +1,4 @@
-/* Node test for Coloring Book v2 — real crayon (window.__colorTest).
+/* Node test for Coloring Book v3 — real crayon + SAVE.
    Danny's 2026-11-10 call: "change the color book game to
    work more like a real crayon. U have it where u just tap
    and the color shows up. That's not fun. In the real word
@@ -7,17 +7,23 @@
    of coloring. U try to stay in the lines."
    So: pick a crayon, SCRIBBLE back and forth — strokes lay
    down waxy crayon under the line art, spilling outside
-   the lines like the real thing. A page is finished when
-   about half its line-art area is colored in (paint
-   outside the lines shows, but doesn't count). 10 dots
-   light up as you color, each keeping the crayon color
-   that earned it; the eraser scrubs paint back off.
+   the lines like the real thing. 10 dots light up as the
+   line-art area fills (paint outside the lines shows, but
+   doesn't count). The eraser scrubs paint back off.
    RANDOM every playthrough: fresh load and PLAY AGAIN
-   shuffle the pictures; finishing one rolls to a random
-   unfinished one; the NEW PICTURE button re-rolls any
-   time, never erasing work. Gallery picker jumps to any
-   picture, thumbnails show the real coloring. Color all 6
-   for the finale gallery + PLAY AGAIN.
+   shuffle the pictures; the NEW PICTURE button re-rolls any
+   time, never erasing work — and if there's nowhere left to
+   re-roll to it opens the gallery instead of silently doing
+   nothing. Gallery picker jumps to any picture, thumbnails
+   show the real coloring. Color all 6 for the finale
+   gallery + PLAY AGAIN.
+   Danny's 2026-11-10 playtest (v3): the game NEVER
+   finishes a page on its own — reaching half the picture
+   only lights the last dot. A big green SAVE button
+   appears once any color is down; SHE taps it when SHE
+   thinks she's done, and only then does the page
+   celebrate and roll on. The paper also stays clear of
+   the site-wide 84px back button in portrait.
    Run: node tools/tests/coloringbook.test.cjs */
 "use strict";
 const fs = require("fs");
@@ -91,10 +97,14 @@ function scribblePage() {
   T.stroke(pts);
 }
 // Finish the current picture the honest way: scribble
-// until the page throws its celebration.
+// until the dots are full, then SHE taps SAVE — the game
+// never finishes a page on its own.
 function finishCurrent() {
   T.debug.paintToComplete();
-  eq(T.state, "celebrate", "scribbling to half the picture throws the celebration");
+  eq(T.state, "color", "half the picture colored still doesn't finish it on its own");
+  ok(T.saveReady, "SAVE is showing once there's color down");
+  ok(T.save(), "SAVE finishes the page");
+  eq(T.state, "celebrate", "SAVE throws the celebration");
   ok(T.isDone(T.current), "page marked finished");
 }
 
@@ -196,7 +206,7 @@ test("eraser scrubs paint back off, dots unlight", () => {
   ok(!T.isDone(T.current), "erasing never completes a page");
 });
 
-test("a page completes at about half the picture colored", () => {
+test("half the picture lights the last dot but NEVER finishes the page on its own", () => {
   T.start();
   T.selectColor(0);
   T.debug.paintToCoverage(0.45);
@@ -204,9 +214,42 @@ test("a page completes at about half the picture colored", () => {
   eq(T.state, "color", "still coloring just under half");
   ok(!T.isDone(T.current), "not finished yet");
   T.stroke([{ x: 50, y: 350 }, { x: 350, y: 350 }, { x: 50, y: 380 }, { x: 350, y: 380 }]);
-  eq(T.state, "celebrate", "crossing half the picture starts the celebration");
+  ok(T.coverage >= T.target, "crossed half the picture (got " + T.coverage + ")");
+  eq(T.progress.dots, 10, "all ten dots lit at half");
+  eq(T.state, "color", "still coloring — the game never decides she's done");
+  ok(!T.isDone(T.current), "not finished without her SAVE tap");
+  // And she can keep coloring past half as long as she likes.
+  T.stroke([{ x: 50, y: 50 }, { x: 350, y: 50 }]);
+  eq(T.state, "color", "still coloring after more scribbling");
+  ok(!T.isDone(T.current), "still not finished");
+});
+
+test("SAVE is the only way to finish a page — hidden on a blank page, back off when erased", () => {
+  T.start();
+  eq(T.saveReady, false, "no SAVE on a blank page");
+  eq(T.save(), false, "SAVE on a blank page does nothing");
+  T.selectColor(0);
+  T.stamp(200, 200);
+  eq(T.saveReady, true, "SAVE appears once there's color down");
+  ok(T.coverage > 0 && T.coverage < T.target, "a dab is nowhere near half — SAVE is her call, not the game's");
+  ok(T.save(), "SAVE finishes the page");
+  eq(T.state, "celebrate", "SAVE throws the celebration");
   ok(T.isDone(T.current), "page finished");
-  approx(T.coverage, 0.5, 0.08, "finished at about half colored");
+  eq(T.saveReady, false, "no SAVE while celebrating");
+  eq(T.save(), false, "no double-finish during the celebration");
+  stepN(140);
+  eq(T.state, "color", "rolled on to the next picture");
+  // A fresh page: SAVE hides again until she colors.
+  eq(T.saveReady, false, "SAVE hidden on the fresh page");
+  // Erasing everything hides SAVE again.
+  T.selectColor(0);
+  T.stamp(200, 200);
+  eq(T.saveReady, true, "SAVE back after a dab");
+  T.selectColor(13); // eraser
+  T.stroke([{ x: 200, y: 200 }, { x: 200, y: 200 }]);
+  T.stamp(200, 200);
+  eq(T.coverage, 0, "all paint erased");
+  eq(T.saveReady, false, "SAVE hides when the paint is gone");
 });
 
 test("celebration rolls to a random unfinished picture", () => {
@@ -237,7 +280,7 @@ test("NEW PICTURE re-rolls to a random unfinished picture, keeps the scribbles",
   approx(T.coverageOf(first), cov, 0.001, "skipping never erases work");
 });
 
-test("NEW PICTURE does nothing when only the current picture is left", () => {
+test("NEW PICTURE opens the gallery when only the current picture is left", () => {
   T.start();
   let guard = 0;
   while (T.done.length < 5 && guard++ < 10) {
@@ -247,8 +290,21 @@ test("NEW PICTURE does nothing when only the current picture is left", () => {
   eq(T.done.length, 5, "five finished");
   eq(T.unfinishedCount, 1, "one picture left");
   const cur = T.current;
-  eq(T.newPicture(), false, "nowhere to re-roll to");
-  eq(T.current, cur, "still on the last picture");
+  ok(T.newPicture(), "NEW PICTURE does something instead of silently nothing");
+  eq(T.current, cur, "still on the last picture — nothing to re-roll to");
+  ok(T.galleryShown, "the gallery opens so she can jump anywhere");
+  eq(T.galleryMode, "picker", "gallery is in picker mode");
+});
+
+test("NEW PICTURE during the celebration jumps right away", () => {
+  T.start();
+  const first = T.current;
+  finishCurrent(); // state is "celebrate" now
+  eq(T.state, "celebrate", "celebrating");
+  ok(T.newPicture(), "NEW PICTURE works mid-celebration");
+  eq(T.state, "color", "straight back to coloring, no waiting out the beat");
+  ok(T.current !== first, "a different picture");
+  eq(T.done.length, 1, "the finished page stays finished");
 });
 
 test("thumbnail gallery jumps to any picture, finished or not", () => {
