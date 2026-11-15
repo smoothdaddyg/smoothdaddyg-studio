@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "tankwar", title: "Tank War", desc: "Drive your tank with two levers — both up to go forward, one up and one down to turn! Hide behind rocks and trees, then blast the enemy tanks in 3 levels!",
+    hue: 130, sprite: "gem", url: "games/tankwar/" },
   { id: "coloringbook", title: "Coloring Book", desc: "Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and scribble back and forth, just like a real crayon!",
     hue: 45, sprite: "gem", url: "games/coloringbook/" },
   { id: "unicornjoust", title: "Unicorn Joust", desc: "Ride a unicorn and joust weird riders — flying pigs, a dragon, robot chickens and a space llama! Whoever is higher wins!",
