@@ -137,19 +137,24 @@ test("both levers up drives forward; both down reverses", () => {
   T.debug.clearLevers();
 });
 
-test("one up one down spins in place — left up turns left, right up turns right", () => {
+// Real-tank pivot (Danny's 2026-11-16 playtest caught the old
+// sign: left-down + right-up must turn LEFT, like a real tank
+// — left track back + right track forward pivots the nose
+// left. The old test and code had agreed on the wrong
+// direction, so this test pins Danny's exact input).
+test("one up one down spins in place — left down + right up turns left, left up + right down turns right", () => {
   fresh();
   T.debug.placePlayer(200, 400, -Math.PI / 2);
   parkOthers(0);
   const a0 = T.player.angle;
-  T.debug.setLever("L", 1); T.debug.setLever("R", -1);
-  stepN(30);
-  ok(T.player.angle < a0 - 1.0, "left track forward spins left (angle " + T.player.angle.toFixed(2) + ")");
-  ok(Math.abs(T.player.x - 200) < 3 && Math.abs(T.player.y - 400) < 3, "spun in place, did not travel");
   T.debug.setLever("L", -1); T.debug.setLever("R", 1);
+  stepN(30);
+  ok(T.player.angle < a0 - 1.0, "left down + right up spins left (angle " + T.player.angle.toFixed(2) + ")");
+  ok(Math.abs(T.player.x - 200) < 3 && Math.abs(T.player.y - 400) < 3, "spun in place, did not travel");
+  T.debug.setLever("L", 1); T.debug.setLever("R", -1);
   const a1 = T.player.angle;
   stepN(30);
-  ok(T.player.angle > a1 + 1.0, "right track forward spins right");
+  ok(T.player.angle > a1 + 1.0, "left up + right down spins right");
   T.debug.clearLevers();
 });
 
