@@ -41,6 +41,12 @@
    handoff the carrier runs for the goal on his own, dodging
    the nearest defender, while the defense chases.
 
+   PASS RUSH: the rush holds for a beat after the snap so the
+   QB gets a second to read the field (live-check fix
+   2026-11-16 — with no delay, hesitating 0.6s after the
+   snap was a sack every time). The lines stand 2.5 yards
+   apart at the snap so the two teams don't overlap.
+
    NO-GAME-OVER: there is no losing here. A tackle is a
    whistle and a new line of scrimmage, never a restart.
    NO READING: yard lines on the field, a yard label, a
@@ -68,6 +74,10 @@
     CATCH_R: 1.6,       // yd (receiver reaches the landing spot)
     HANDOFF_R: 1.7,     // yd (QB runs into a back)
     PLAY_CAP: 9,        // s (safety valve: whistle, ball back at line)
+    RUSH_DELAY: 1.0,    // s the rush holds after the snap — the QB
+                        // gets a beat to read the field before the
+                        // pocket collapses (live-check fix 2026-11-16:
+                        // with no delay a 0.6s hesitation was a sack)
     WHISTLE_T: 1.1,     // s (pause after a tackle / dead ball)
     STICK_R: 55,        // px (max stick drag)
     PASS_R: 38,         // px (PASS button radius)
@@ -198,13 +208,13 @@
       mkPlayer("off", "wr", 13, L + 1, CFG.REC_SPEED + rnd(-0.3, 0.4), "#29faff"),
       mkPlayer("off", "rb", -6, L + 5, CFG.REC_SPEED + rnd(-0.2, 0.3), "#7df9ff"),
       mkPlayer("off", "rb", 6, L + 5, CFG.REC_SPEED + rnd(-0.2, 0.3), "#7df9ff"),
-      mkPlayer("off", "ol", -4, L + 0.5, 4.5, "#1e90c8"),
-      mkPlayer("off", "ol", 4, L + 0.5, 4.5, "#1e90c8"),
+      mkPlayer("off", "ol", -4, L + 1, 4.5, "#1e90c8"),
+      mkPlayer("off", "ol", 4, L + 1, 4.5, "#1e90c8"),
     ];
     def = [
-      mkPlayer("def", "dl", -4, L - 1, CFG.DEF_SPEED, "#ff3b30"),
-      mkPlayer("def", "dl", 0, L - 1, CFG.DEF_SPEED, "#ff3b30"),
-      mkPlayer("def", "dl", 4, L - 1, CFG.DEF_SPEED, "#ff3b30"),
+      mkPlayer("def", "dl", -4, L - 1.5, CFG.DEF_SPEED, "#ff3b30"),
+      mkPlayer("def", "dl", 0, L - 1.5, CFG.DEF_SPEED, "#ff3b30"),
+      mkPlayer("def", "dl", 4, L - 1.5, CFG.DEF_SPEED, "#ff3b30"),
       mkPlayer("def", "lb", -8, L - 4, CFG.DEF_SPEED, "#ff9f2e"),
       mkPlayer("def", "lb", 8, L - 4, CFG.DEF_SPEED, "#ff9f2e"),
       mkPlayer("def", "db", -11, L - 9, CFG.DEF_SPEED, "#ff5e8a"),
@@ -478,6 +488,11 @@
   function tickDefense(dt) {
     for (const d of def) {
       if (d.blockT > 0) { d.blockT -= dt; continue; }
+      // The rush holds for a beat after the snap — the QB gets
+      // a second to read the field before the pocket collapses.
+      // DBs still cover right away; a ball already in the air
+      // pulls everybody to the landing spot regardless.
+      if ((d.role === "dl" || d.role === "lb") && playT < CFG.RUSH_DELAY && !ballInAir) continue;
       if (ballInAir) { moveToward(d, ballInAir.x1, ballInAir.y1, dt, CFG.DEF_SPEED); continue; }
       if (carrier && carrier.role !== "qb") { moveToward(d, carrier.x, carrier.y, dt, CFG.DEF_SPEED); continue; }
       if (carrier && carrier.role === "qb") {
@@ -488,14 +503,24 @@
       }
       // No carrier (shouldn't happen) — hold ground.
     }
-    // Keep defenders from stacking on one spot.
+    // Keep defenders from stacking on one spot. Half-strength
+    // positional correction: each pair separates by (min-d)/2
+    // per frame, so a crowd closing on the carrier spreads
+    // smoothly instead of flinging defenders around (a full-
+    // strength pass with seven defenders on one point used
+    // to explode them across the field).
     for (let i = 0; i < def.length; i++) for (let j = i + 1; j < def.length; j++) {
       const a = def[i], b = def[j];
       const d = dist(a.x, a.y, b.x, b.y), min = 1.8;
-      if (d > 0.001 && d < min) {
-        const push = (min - d) / 2 / d;
-        a.x -= (b.x - a.x) * push; a.y -= (b.y - a.y) * push;
-        b.x += (b.x - a.x) * push; b.y += (b.y - a.y) * push;
+      if (d < min) {
+        if (d > 0.001) {
+          const push = (min - d) / 4 / d;
+          a.x -= (b.x - a.x) * push; a.y -= (b.y - a.y) * push;
+          b.x += (b.x - a.x) * push; b.y += (b.y - a.y) * push;
+        } else {
+          // Exactly coincident: nudge apart deterministically.
+          a.x -= 0.05; b.x += 0.05;
+        }
       }
     }
   }

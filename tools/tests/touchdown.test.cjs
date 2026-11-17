@@ -64,8 +64,10 @@ function ok(c, m) { if (!c) throw new Error(m); }
 function fresh() { T.debug.fresh(); }
 function stepN(n) { T.debug.stepN(n); }
 function parkDefenders() {
-  // Park the defense far away so it can't interfere.
-  for (const d of T.def) { d.x = 14; d.y = 98; }
+  // Park the defense far away so it can't interfere — spread
+  // along the far end, never stacked on one point (a 7-stack
+  // makes the separation pass fling defenders around).
+  T.def.forEach((d, i) => { d.x = -14 + i * 4.5; d.y = 98; });
 }
 
 test("boots on the title screen; fresh drive lines up on the own 20 with the QB holding the ball", () => {
@@ -261,6 +263,30 @@ test("PASS buttons are mirrored — both ends of the deck throw", () => {
   parkDefenders();
   T.debug.passTap("R");
   ok(T.ballInAir, "right PASS throws");
+});
+
+test("the rush holds for a beat after the snap — the QB gets a second to read the field", () => {
+  fresh();
+  T.debug.snap();
+  const qb = T.off[0];
+  const midDL = T.def[1]; // middle lineman — the blockers take the side ones
+  const d0 = Math.hypot(midDL.x - qb.x, midDL.y - qb.y);
+  stepN(30); // 0.5s — still inside the rush delay
+  ok(Math.abs(midDL.y - 78.5) < 0.01, "rush holds: middle DL hasn't moved at 0.5s");
+  eq(T.state, "play", "QB untouched at 0.5s");
+  eq(T.carrier, qb, "QB still has the ball at 0.5s");
+  stepN(45); // 1.25s total — the rush is on now
+  const d1 = Math.hypot(midDL.x - qb.x, midDL.y - qb.y);
+  ok(d1 < d0 - 1, "rush is on after the delay: DL closing in (was " + d0.toFixed(1) + ", now " + d1.toFixed(1) + ")");
+});
+
+test("the two lines stand clear at the snap — no overlapping circles", () => {
+  fresh();
+  let min = 1e9;
+  for (const o of T.off) for (const d of T.def) {
+    min = Math.min(min, Math.hypot(o.x - d.x, o.y - d.y));
+  }
+  ok(min >= 2.0, "closest opponents are " + min.toFixed(2) + " yd apart (two 0.9-yd circles need 1.8)");
 });
 
 test("renders every state without throwing, HUD clear of the back button", () => {
