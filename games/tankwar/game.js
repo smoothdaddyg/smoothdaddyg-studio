@@ -419,7 +419,12 @@
     // two tracks, turn rate is their difference. Both up =
     // forward, both down = reverse, one up one down = spin.
     const v = (L + R) / 2 * CFG.PLAYER_SPEED;
-    const w = (R - L) / 2 * CFG.TURN_MAX;
+    // Turn rate is the tracks' DIFFERENCE — and the sign is
+    // the real-tank one: left track back + right track forward
+    // pivots the nose LEFT (Danny's 2026-11-16 playtest: the
+    // old (R - L) sign had it backwards — left-down + right-up
+    // turned right on screen). So w = (L - R), not (R - L).
+    const w = (L - R) / 2 * CFG.TURN_MAX;
     player.angle += w * dt;
     player.x += Math.cos(player.angle) * v * dt;
     player.y += Math.sin(player.angle) * v * dt;
