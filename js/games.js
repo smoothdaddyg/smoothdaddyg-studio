@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "touchdown", title: "Touchdown!", desc: "Drive 100 yards to the goal! Drag in the bottom deck to run your quarterback, tap PASS to throw to an open receiver, or hand it off — tackle, line up, and go again until you score!",
+    hue: 120, sprite: "ball", url: "games/touchdown/" },
   { id: "tankwar", title: "Tank War", desc: "Drive your tank with two levers — both up to go forward, one up and one down to turn! Hide behind rocks and trees, then blast the enemy tanks in 3 levels!",
     hue: 130, sprite: "gem", url: "games/tankwar/" },
   { id: "coloringbook", title: "Coloring Book", desc: "Color cool pictures with your crayon box — a unicorn, a rocket, a spaceship, a satellite, a flower and a cat! Pick a crayon and scribble back and forth, just like a real crayon!",

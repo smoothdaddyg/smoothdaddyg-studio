@@ -6,6 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
+- 2026-11-16 — New game: **Touchdown!** (#25; Danny's call — a test game on the Passing Frenzy passing feel, but real football: line up, GO, everybody moves; thumb moves the QB; receivers run random routes; throw to the open guy, handoff to a back, tackle = line up at that spot, drive 100 yards to a touchdown) — Bob building on `game/touchdown`, touches shared `js/games.js` + `games.html` + `sitemap.xml`.
 
 ## Up next
 - (add tasks here)
