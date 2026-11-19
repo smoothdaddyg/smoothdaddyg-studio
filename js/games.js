@@ -27,6 +27,8 @@
    ============================================================ */
 
 const GAMES = [
+  { id: "dollarup", title: "Dollar Up!", desc: "Dollar up to $5! See the price, pick the smallest whole dollars that cover it — count the bills and tap the right one!",
+    hue: 140, sprite: "gem", url: "games/dollarup/" },
   { id: "touchdown", title: "Touchdown!", desc: "Drive 100 yards to the goal! Drag in the bottom deck to run your quarterback, tap PASS to throw to an open receiver, or hand it off — tackle, line up, and go again until you score!",
     hue: 120, sprite: "ball", url: "games/touchdown/" },
   { id: "tankwar", title: "Tank War", desc: "Drive your tank with two levers — both up to go forward, one up and one down to turn! Hide behind rocks and trees, then blast the enemy tanks in 3 levels!",

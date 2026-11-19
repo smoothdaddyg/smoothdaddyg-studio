@@ -6,7 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
-(none — Touchdown! shipped, see Done)
+- 2026-11-19 — New game: **Dollar Up!** (#26; Danny's call — his daughter's school worksheet, "Dollar Up to $5": items with receipt prices on the left, whole-dollar money amounts on the right; match each item to the smallest whole dollars that cover its price. The game randomizes the cost and the money; she decides which one is right). (Bob)
 
 ## Up next
 - (add tasks here)
