@@ -214,6 +214,32 @@ test("music is its own 64-step cheerful loop with loud bass and a harmony voice"
   ok(m.lead.some((v, i) => v > 0 && m.harmony[i] > 0 && m.harmony[i] < v), "harmony sings a third under the lead");
 });
 
+test("wide desktop layout: title, emoji row and card numerals all fit inside the viewport", () => {
+  // The live check at 1919x998 found the title font at 211px
+  // (UP! landing on the emoji row) and the card numeral at
+  // 186px (bursting out of its 150px card). All width-scaled
+  // fonts are capped now; the phone layout is unchanged.
+  function checkLayout(w, h, label) {
+    T.debug.resize(w, h);
+    const L = T.layout, S = T.screen;
+    ok(L.titleFont <= 96, label + ": title font capped (" + L.titleFont + "px)");
+    ok(L.emojiFont <= 150, label + ": emoji row capped (" + L.emojiFont + "px)");
+    ok(L.cardFont <= 44, label + ": card numeral capped (" + L.cardFont + "px)");
+    ok(L.cardFont * 0.5 + 8 <= 42, label + ": numeral fits its card");
+    const upY = S.PH * 0.30 + L.titleGap;
+    ok(upY + 60 < S.PH * 0.68, label + ": UP! sits clear above the emoji row (" + upY.toFixed(0) + " vs " + (S.PH * 0.68).toFixed(0) + ")");
+    for (const c of T.cards) {
+      ok(c.y + c.h <= h, label + ": card bottom inside the viewport (" + (c.y + c.h) + " <= " + h + ")");
+      ok(c.w <= 300, label + ": card not stretched desktop-wide (w=" + c.w.toFixed(0) + ")");
+    }
+    T.debug.render();
+  }
+  checkLayout(400, 700, "phone 400x700");
+  checkLayout(1919, 998, "desktop 1919x998");
+  checkLayout(1024, 768, "iPad landscape 1024x768");
+  T.debug.resize(400, 700); // leave the phone layout in place
+});
+
 test("renders every state without throwing, playfield clear of the back button", () => {
   T.debug.startGame();
   T.debug.render();

@@ -191,6 +191,13 @@
   let cards = [];   // {x, y, w, h, amount} — the three money cards
   let playBtn = { x: 200, y: 560, r: CFG.PLAY_R };
   let nextBtn = { x: 200, y: 560, r: CFG.PLAY_R };
+  // LAY: every font that scales with the screen is capped here.
+  // (Live-check fix 2026-11-19: at 1919px wide the title font
+  // hit 211px and "UP!" landed on the emoji row, and the card
+  // numeral hit 186px and burst out of its 150px card. Width
+  // scaling is for the portrait phone, not a desktop monitor.)
+  let LAY = { titleFont: 44, titleGap: 55, emojiFont: 80, cardFont: 34,
+    cardStar: 38, winTitle: 34, winStars: 96, levelFont: 30, flashFont: 36 };
   function resize() {
     DPR = Math.min(2, window.devicePixelRatio || 1);
     W = window.innerWidth; H = window.innerHeight;
@@ -200,13 +207,27 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     DECK_H = Math.round(clamp(H * 0.28, 190, 220));
     PH = H - DECK_H;
-    const gap = 14, cw = (W - gap * 4) / 3;
+    const gap = 14, cw = Math.min((W - gap * 4) / 3, 300);
+    const totalW = cw * 3 + gap * 2;
+    const startX = (W - totalW) / 2;
     const cy = PH + (DECK_H - CFG.CARD_H) / 2;
     cards = [0, 1, 2].map((i) => ({
-      x: gap + i * (cw + gap), y: cy, w: cw, h: CFG.CARD_H, amount: 0,
+      x: startX + i * (cw + gap), y: cy, w: cw, h: CFG.CARD_H, amount: 0,
     }));
     playBtn = { x: W / 2, y: PH + DECK_H / 2, r: CFG.PLAY_R };
     nextBtn = { x: W / 2, y: PH + DECK_H / 2, r: CFG.PLAY_R };
+    LAY = {
+      titleFont: Math.round(Math.min(W * 0.11, 96)),
+      titleGap: 0, // filled below, from the capped font
+      emojiFont: Math.round(Math.min(W * 0.20, PH * 0.24, 150)),
+      cardFont: Math.round(Math.min(cw * 0.30, 44)),
+      cardStar: Math.round(Math.min(cw * 0.34, 48)),
+      winTitle: Math.round(Math.min(W * 0.085, 72)),
+      winStars: Math.round(Math.min(W * 0.24, 150)),
+      levelFont: Math.round(Math.min(W * 0.075, 64)),
+      flashFont: Math.round(Math.min(W * 0.09, 72)),
+    };
+    LAY.titleGap = Math.round(LAY.titleFont * 1.25);
   }
   window.addEventListener("resize", resize);
 
@@ -419,13 +440,15 @@
         bx += bw + 6;
       }
     }
-    // The big numeral — the answer she is choosing.
+    // The big numeral — the answer she is choosing. Capped
+    // in LAY so it can never burst out of the card on a
+    // wide screen (live-check fix 2026-11-19).
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold " + Math.round(c.w * 0.30) + "px 'Press Start 2P', monospace";
+    ctx.font = "bold " + LAY.cardFont + "px 'Press Start 2P', monospace";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("$" + c.amount, x + c.w / 2, c.y + c.h - 42);
     if (hot) {
-      ctx.font = Math.round(c.w * 0.34) + "px monospace";
+      ctx.font = LAY.cardStar + "px monospace";
       ctx.fillText("\u2605", x + c.w / 2, c.y + 22);
     }
   }
@@ -525,12 +548,12 @@
 
     if (state === "title") {
       ctx.fillStyle = "#29faff";
-      ctx.font = "bold " + Math.round(W * 0.11) + "px 'Press Start 2P', monospace";
+      ctx.font = "bold " + LAY.titleFont + "px 'Press Start 2P', monospace";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("DOLLAR", W / 2, PH * 0.30);
-      ctx.fillText("UP!", W / 2, PH * 0.30 + Math.round(W * 0.13));
-      ctx.font = Math.round(W * 0.20) + "px monospace";
-      ctx.fillText("\u{1F32E} \u{1F4B5} \u{1F9C1}", W / 2, PH * 0.62);
+      ctx.fillText("UP!", W / 2, PH * 0.30 + LAY.titleGap);
+      ctx.font = LAY.emojiFont + "px monospace";
+      ctx.fillText("\u{1F32E} \u{1F4B5} \u{1F9C1}", W / 2, PH * 0.68);
       drawBigButton(playBtn, "\u25B6", "#22a355");
       drawParticles();
       return;
@@ -542,7 +565,7 @@
       for (let i = 0; i < 3; i++) drawCard(cards[i], i);
       if (flash && flash.t > 0) {
         ctx.fillStyle = "#ffe14d";
-        ctx.font = "bold " + Math.round(W * 0.09) + "px 'Press Start 2P', monospace";
+        ctx.font = "bold " + LAY.flashFont + "px 'Press Start 2P', monospace";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(flash.text, W / 2, PH * 0.52);
       }
@@ -550,7 +573,7 @@
         ctx.fillStyle = "rgba(6,10,18,0.55)";
         ctx.fillRect(0, 0, W, PH);
         ctx.fillStyle = "#ffe14d";
-        ctx.font = "bold " + Math.round(W * 0.075) + "px 'Press Start 2P', monospace";
+        ctx.font = "bold " + LAY.levelFont + "px 'Press Start 2P', monospace";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText("LEVEL " + level + "!", W / 2, PH * 0.42);
         drawBigButton(nextBtn, "\u25B6", "#22a355");
@@ -560,10 +583,10 @@
     }
     if (state === "win") {
       ctx.fillStyle = "#ffe14d";
-      ctx.font = "bold " + Math.round(W * 0.085) + "px 'Press Start 2P', monospace";
+      ctx.font = "bold " + LAY.winTitle + "px 'Press Start 2P', monospace";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("YOU DID IT!", W / 2, PH * 0.32);
-      ctx.font = Math.round(W * 0.24) + "px monospace";
+      ctx.font = LAY.winStars + "px monospace";
       ctx.fillText("\u2605".repeat(3), W / 2, PH * 0.55);
       drawBigButton(playBtn, "\u25B6", "#22a355");
       drawParticles();
@@ -586,6 +609,8 @@
     get roundDone() { return roundDone; },
     get cards() { return cards; },
     get deckTop() { return PH; },
+    get layout() { return LAY; },
+    get screen() { return { W: W, H: H, PH: PH }; },
     get music() { return MUSIC_CFG; },
     get items() { return ITEMS; },
     get bands() { return BANDS; },
@@ -597,6 +622,7 @@
       startGame: startGame,
       tapCard: tapCard,
       onDown: onDown,
+      resize: function (w, h) { window.innerWidth = w; window.innerHeight = h; resize(); },
       stepN: function (n) { for (let i = 0; i < n; i++) step(1 / 60); },
       render: render,
       setRound: function (priceCents) {
