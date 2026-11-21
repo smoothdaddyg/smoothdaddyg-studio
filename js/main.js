@@ -94,6 +94,12 @@
   }
 
   /* ---------- cards ---------- */
+  function catTag(g) {
+    if (typeof CATEGORIES === "undefined" || !g.category || !CATEGORIES[g.category]) return "";
+    const c = CATEGORIES[g.category];
+    return `<span class="cat-tag" style="color:hsl(${c.hue},95%,65%);border-color:hsla(${c.hue},95%,65%,.5)">${c.name.toUpperCase()}</span>`;
+  }
+
   function cardHTML(g, page, plays) {
     // On the games page the links are relative to root; on home too (both at root).
     void page;
@@ -108,6 +114,7 @@
           <img src="games/${g.id}/cover.webp" alt="" loading="lazy" data-cover />
         </div>
         <div class="card-body">
+          ${catTag(g)}
           <h3>${g.title}</h3>
           <p>${g.desc}</p>
           <div class="card-cta">
@@ -133,9 +140,34 @@
     const el = document.getElementById("game-grid");
     if (!el || typeof GAMES === "undefined") return;
     const counts = studioOn() ? SDGplays.getAll() : null;
-    const list = studioOn() ? SDGplays.sortByPlays(GAMES, counts) : GAMES;
+    const base = studioOn() ? SDGplays.sortByPlays(GAMES, counts) : GAMES;
+    const list =
+      activeCategory === "all"
+        ? base
+        : base.filter((g) => g.category === activeCategory);
+    renderChips();
     renderGrid(el, list, counts);
     renderStudioPanel();
+  }
+
+  /* ---------- category filter chips (games page) ---------- */
+  let activeCategory = "all";
+
+  function renderChips() {
+    const host = document.getElementById("category-chips");
+    if (!host || typeof CATEGORIES === "undefined") return;
+    const slugs = Object.keys(CATEGORIES);
+    const chip = (slug, label) =>
+      `<button type="button" class="cat-chip${activeCategory === slug ? " active" : ""}" data-cat="${slug}">${label}</button>`;
+    host.innerHTML =
+      chip("all", "ALL GAMES") +
+      slugs.map((s) => chip(s, CATEGORIES[s].name.toUpperCase())).join("");
+    host.querySelectorAll(".cat-chip").forEach((b) => {
+      b.addEventListener("click", () => {
+        activeCategory = b.dataset.cat;
+        renderGameGrid();
+      });
+    });
   }
 
   /* World plays panel: global counts from the server log, studio only. */
@@ -336,6 +368,12 @@
     .studio-day .dl { margin-top:6px; font-family:'Press Start 2P',monospace; font-size:8px; color:rgba(234,246,255,.6); }
     .studio-day .dn { font-family:'Press Start 2P',monospace; font-size:8px; color:#ffe14d; margin-bottom:4px; }
     .studio-loading { font-family:'Press Start 2P',monospace; font-size:10px; color:rgba(234,246,255,.6); letter-spacing:1px; padding:8px 0; }
+    /* category filter chips + card tags */
+    .cat-chips { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 28px; }
+    .cat-chip { font-family:'Press Start 2P',monospace; font-size:10px; letter-spacing:2px; color:#eaf6ff; background:transparent; border:2px solid rgba(41,250,255,.4); border-radius:999px; padding:12px 18px; cursor:pointer; }
+    .cat-chip:hover { border-color:#29faff; color:#29faff; }
+    .cat-chip.active { background:#29faff; border-color:#29faff; color:#0b0b16; box-shadow:0 0 18px rgba(41,250,255,.45); }
+    .cat-tag { align-self:flex-start; font-family:'Press Start 2P',monospace; font-size:8px; letter-spacing:2px; border:1px solid; border-radius:4px; padding:5px 7px; }
   `;
   document.head.appendChild(extra);
 

@@ -6,7 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
-(none — Dollar Up! shipped, see Done)
+- 2026-11-21 — **Smart Games batch (#27–29) + category system** (Danny's call 2026-11-21: more education games from Edie's worksheets, categories with cool names — no plain genre words; learning games = "Smart Games" so a kid can say it with pride). Coordinator: Bob (subagent session). Builders: three subagents, one per game, own game dir + own test file ONLY, never shared files. **Clockwork (#27)** — time: L1 whole hours (tap the clock matching the digital time), L2 quarter past/to, L3 AM/PM picture-card sort (pictures only, sun/moon buckets), L4 end time (start + minutes, pick from 3 digital clocks, food pictures like the worksheet), L5 mixed grand round. **Price Check (#28)** — money: two foods with price tags up to $10, tap the MORE one or the LESS one (big up/down arrow coin prompt, no words); gaps close each level, L5 near-identical ($9.82 vs $9.83). **Bigger! (#29)** — numbers: two big two-digit numbers, tap the bigger (or smaller on alternate rounds, big/small visual cue); gaps close each level, L5 gap of 1. Category system: `category` field on every game in js/games.js; Smart Games (dollarup + 3 new), Blast Zone, Game Day, Chill Zone, Playground; filter chips on games.html + tag on each card. Shared files owned by coordinator only. Ship check per game + curl-md5 verify before calling live.
 
 ## Up next
 - (add tasks here)
