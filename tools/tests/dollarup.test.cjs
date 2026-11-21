@@ -50,7 +50,13 @@ const sandbox = {
   requestAnimationFrame: noop,
   makeAudio: () => ({
     tone: noop, noise: noop, arp: noop, unlock: noop, state: () => "running",
-    makeMusic: () => ({ tick: noop, start: noop, stop: noop, on: false, step: 0 }),
+    makeMusic: () => {
+      const m = { on: false, step: 0 };
+      m.start = () => { m.on = true; };
+      m.stop = () => { m.on = false; };
+      m.tick = () => { if (m.on) m.step++; };
+      return m;
+    },
   }),
   drawPixelNumber: noop,
   Math, JSON, Object, Array,
@@ -276,6 +282,15 @@ test("music is its own 64-step cheerful loop with loud bass and a harmony voice"
   ok(m.lead.some((n) => n > 0), "lead sings");
   ok(m.harmony.some((n) => n > 0), "harmony sings under it");
   ok(m.lead.join() !== m.bass.join(), "lead and bass are different lines");
+});
+
+test("the music loop actually starts and ticks once the game starts", () => {
+  T.fresh();
+  const s0 = T.musicState.step;
+  T.startGame();
+  ok(T.musicState.on, "loop starts with the game (not just configured)");
+  T.stepN(30);
+  ok(T.musicState.step > s0, "loop ticks while playing");
 });
 
 test("renders every state without throwing, playfield clear of the back button", () => {

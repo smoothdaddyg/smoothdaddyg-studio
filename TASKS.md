@@ -6,7 +6,7 @@ the PR merges and the deploy is verified live. One task per person at a time
 on shared files (`js/chiptune.js`, `js/main.js`, `js/games.js`, `AGENTS.md`).
 
 ## In progress
-(none — Smart Games batch shipped, see Done)
+- 2026-11-21 — **Dollar Up! (#26) silent-music fix** (Danny's go-ahead after the Smart Games batch coordinator found the defect: Dollar Up! creates its music object but never calls MUSIC.start()/MUSIC.tick(), so the loop never plays. Same fix already shipped in Clockwork/Price Check/Bigger! with a pinned test. This task: wire start/tick in games/dollarup/game.js following the Clockwork pattern exactly + add the same "music actually starts and ticks" test to the Dollar Up! suite. Scope: Dollar Up! only.)
 
 ## Up next
 - (add tasks here)

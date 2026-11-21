@@ -244,6 +244,7 @@
     const lv = makeLevel(1);
     tiles = lv.tiles; deck = lv.deck;
     state = "play";
+    if (MUSIC) { try { MUSIC.start(); } catch (e) {} }
     if (window.SDGplays) window.SDGplays.played("dollarup");
   }
   function nextLevel() {
@@ -533,6 +534,7 @@
     requestAnimationFrame(frame);
   }
   function step(dt) {
+    if (MUSIC) { try { MUSIC.tick(dt); } catch (e) {} }
     stepParticles(dt);
     if (flash) { flash.t -= dt; if (flash.t <= 0) flash = null; }
     if (wiggle) { wiggle.t -= dt; if (wiggle.t <= 0) wiggle = null; }
@@ -606,6 +608,7 @@
     get layout() { return LAY; },
     get screen() { return { W: W, H: H, PH: PH }; },
     get music() { return MUSIC_CFG; },
+    get musicState() { return MUSIC ? { on: MUSIC.on, step: MUSIC.step } : null; },
     get items() { return ITEMS; },
     dollarUp: dollarUp,
     fresh: function () {
