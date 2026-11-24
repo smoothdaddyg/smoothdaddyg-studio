@@ -1,0 +1,4 @@
+# Cedar Park Poop Scoop — never commit real credentials or the live database.
+inc/config.php
+data/*.sqlite
+data/*.sqlite-journal
